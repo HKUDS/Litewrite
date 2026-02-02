@@ -21,7 +21,7 @@ We only support the latest version. Please ensure you're running the most recent
 
 ### Alternative: Email
 
-If Security Advisories are not available, email us at: **security@litewrite.io**
+If Security Advisories are not available, email us at: **security@litewrite.ai**
 
 ### Response Timeline
 
