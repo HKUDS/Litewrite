@@ -1,0 +1,101 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build
+.next/
+out/
+build/
+dist/
+
+# Cache
+.history/
+.preview-cache/
+
+# Testing
+coverage/
+
+# Environment
+.env
+.env.local
+.env.production
+.env.secrets
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project files (optional - comment out if you want to track)
+# projects/
+
+# Database
+prisma/dev.db
+prisma/dev.db-journal
+*.db
+*.db-journal
+
+# Server backup (sensitive data)
+backup-server-config/
+
+# LaTeX compilation artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+
+# Compile server temp files
+compile-server/node_modules/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Key
+*.pem
+*.ppk
+
+/lib/generated/prisma
+*.zip
+
+# Test files
+test.png
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# ai-server
+ai-server/cache/
+ai-server/tests/
+assets/
+
+# projects (root level only)
+/projects/
+
+# Templates (stored in S3; do not commit)
+# Upload new templates to server `templates/` and run add-templates.sh
+templates/
+
+# Docker
+docker-compose.override.yml

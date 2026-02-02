@@ -1,0 +1,30 @@
+# Litewrite WebSocket Server Development Dockerfile
+# Supports hot reload, code mounted via volume
+
+FROM node:22-slim
+
+WORKDIR /app
+
+# Install build tools for native modules
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy dependency files
+COPY package.json package-lock.json ./
+
+# Install dependencies (including dev dependencies)
+RUN npm ci --legacy-peer-deps
+
+# Copy tsconfig (required by tsx)
+COPY tsconfig.json ./
+
+# Code is volume-mounted, no need to COPY server/ and lib/
+
+ENV NODE_ENV=development
+ENV WS_PORT=1234
+
+EXPOSE 1234
+
+# Use tsx watch for hot reload
+CMD ["npx", "tsx", "watch", "server/ws-server.ts"]

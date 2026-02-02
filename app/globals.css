@@ -1,0 +1,1494 @@
+@import "katex/dist/katex.min.css";
+@import "highlight.js/styles/github.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    /* Primary: elegant cyan - lower saturation */
+    --primary: 192 38% 48%;
+    --primary-foreground: 0 0% 100%;
+    /* Secondary: soft turquoise */
+    --secondary: 168 45% 62%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 192 30% 94%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 192 42% 52%;
+    --radius: 0.625rem;
+    --sidebar: 192 20% 98%;
+    --sidebar-foreground: 222.2 84% 4.9%;
+    --sidebar-border: 214.3 31.8% 91.4%;
+    /* Litewrite brand color extensions */
+    --lw-warm: 24 91% 74%;
+    --lw-warm-light: 38 97% 80%;
+
+    /* Glassmorphism variables */
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-bg-light: rgba(255, 255, 255, 0.5);
+    --glass-bg-heavy: rgba(255, 255, 255, 0.85);
+    --glass-border: rgba(255, 255, 255, 0.3);
+    --glass-hover: rgba(255, 255, 255, 0.9);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+
+    /* Gradients - softer and more refined */
+    --gradient-primary: linear-gradient(135deg, #5a9fc8 0%, #4da8bc 50%, #72cfc2 100%);
+    --gradient-ai: linear-gradient(135deg, #9580e8 0%, #7078e0 50%, #5558d8 100%);
+    --gradient-warm: linear-gradient(135deg, #f5d0a0 0%, #e8a87a 100%);
+    --gradient-mesh: radial-gradient(at 40% 20%, rgba(90, 159, 200, 0.12) 0px, transparent 50%),
+                     radial-gradient(at 80% 0%, rgba(114, 207, 194, 0.12) 0px, transparent 50%),
+                     radial-gradient(at 0% 50%, rgba(77, 168, 188, 0.08) 0px, transparent 50%),
+                     radial-gradient(at 80% 50%, rgba(142, 212, 218, 0.08) 0px, transparent 50%),
+                     radial-gradient(at 0% 100%, rgba(232, 168, 122, 0.06) 0px, transparent 50%);
+
+    /* iOS-style spring easing */
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-spring-gentle: cubic-bezier(0.25, 1.15, 0.5, 1);
+    --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
+
+    /* Multi-layer shadow system */
+    --shadow-elevation-1: 0 1px 2px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.08);
+    --shadow-elevation-2: 0 2px 4px rgba(0,0,0,0.04), 0 4px 8px rgba(0,0,0,0.08);
+    --shadow-elevation-3: 0 4px 8px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.12);
+    --shadow-elevation-4: 0 8px 16px rgba(0,0,0,0.06), 0 16px 32px rgba(0,0,0,0.12);
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    /* Primary: elegant cyan - dark mode */
+    --primary: 192 45% 52%;
+    --primary-foreground: 0 0% 100%;
+    /* Secondary: soft turquoise */
+    --secondary: 168 42% 50%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 192 30% 15%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 50.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 192 50% 56%;
+    --sidebar: 222.2 47% 11%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-border: 217.2 32.6% 17.5%;
+    /* Litewrite brand color extensions */
+    --lw-warm: 24 85% 68%;
+    --lw-warm-light: 38 90% 75%;
+
+    /* Glassmorphism variables - dark mode */
+    --glass-bg: rgba(15, 23, 42, 0.7);
+    --glass-bg-light: rgba(15, 23, 42, 0.5);
+    --glass-bg-heavy: rgba(15, 23, 42, 0.85);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-hover: rgba(30, 41, 59, 0.9);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+
+    /* Gradients - dark mode (more refined) */
+    --gradient-mesh: radial-gradient(at 40% 20%, rgba(90, 159, 200, 0.08) 0px, transparent 50%),
+                     radial-gradient(at 80% 0%, rgba(114, 207, 194, 0.08) 0px, transparent 50%),
+                     radial-gradient(at 0% 50%, rgba(77, 168, 188, 0.06) 0px, transparent 50%),
+                     radial-gradient(at 80% 50%, rgba(142, 212, 218, 0.06) 0px, transparent 50%),
+                     radial-gradient(at 0% 100%, rgba(232, 168, 122, 0.04) 0px, transparent 50%);
+
+    /* Multi-layer shadow system - dark mode (deeper and more pronounced) */
+    --shadow-elevation-1: 0 1px 2px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.16);
+    --shadow-elevation-2: 0 2px 4px rgba(0,0,0,0.12), 0 4px 8px rgba(0,0,0,0.16);
+    --shadow-elevation-3: 0 4px 8px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.24);
+    --shadow-elevation-4: 0 8px 16px rgba(0,0,0,0.16), 0 16px 32px rgba(0,0,0,0.28);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  /* Theme switch transition */
+  html {
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Editor page: prevent scrollbars when zooming */
+  html:has(.editor-page-root),
+  body:has(.editor-page-root) {
+    height: 100%;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+/* CodeMirror custom styles */
+.cm-editor {
+  height: 100%;
+  font-size: 14px;
+}
+
+.cm-editor .cm-scroller {
+  font-family: "JetBrains Mono", "Fira Code", "SF Mono", Menlo, Monaco, "Courier New", monospace;
+}
+
+.cm-editor.cm-focused {
+  outline: none;
+}
+
+/* Collaborator cursor styles */
+.cm-ySelectionCaret {
+  position: relative;
+  border-left: 2px solid;
+  margin-left: -1px;
+  margin-right: -1px;
+}
+
+.cm-ySelectionCaretDot {
+  border-radius: 50%;
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  top: -4px;
+  left: -3px;
+}
+
+.cm-ySelectionInfo {
+  position: absolute;
+  top: -1.3em;
+  left: -1px;
+  font-size: 11px;
+  font-family: var(--font-geist-sans);
+  font-style: normal;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: white;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;
+}
+
+.cm-yLineSelection {
+  mix-blend-mode: multiply;
+}
+
+.dark .cm-yLineSelection {
+  mix-blend-mode: screen;
+}
+
+/* PDF preview container */
+.pdf-viewer {
+  background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+}
+
+.dark .pdf-viewer {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+}
+
+/* CodeMirror dark theme adjustments */
+.dark .cm-editor {
+  background-color: hsl(var(--background));
+}
+
+.dark .cm-editor .cm-gutters {
+  background-color: hsl(var(--sidebar));
+  border-right-color: hsl(var(--sidebar-border));
+}
+
+.dark .cm-editor .cm-activeLineGutter {
+  background-color: hsl(var(--accent));
+}
+
+.dark .cm-editor .cm-activeLine {
+  background-color: hsl(var(--accent) / 0.5);
+}
+
+.dark .cm-editor .cm-cursor {
+  border-left-color: hsl(var(--foreground));
+}
+
+.dark .cm-editor .cm-selectionBackground,
+.dark .cm-editor .cm-content ::selection {
+  background-color: hsl(var(--primary) / 0.3);
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Smooth transitions */
+.transition-panel {
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* File tree hover effect */
+.file-tree-item {
+  @apply transition-colors duration-150;
+}
+
+.file-tree-item:hover {
+  @apply bg-accent;
+}
+
+/* Card interaction effects */
+.card-interactive {
+  @apply transition-shadow duration-200;
+}
+
+.card-interactive:hover {
+  @apply shadow-md;
+}
+
+/* Editor container */
+.editor-container {
+  @apply relative h-full overflow-hidden;
+}
+
+/* Toast animations */
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.toast-enter {
+  animation: slideInFromRight 0.3s ease-out forwards;
+}
+
+/* AI Chat message animation */
+@keyframes messageIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-message-in {
+  animation: messageIn 0.3s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* ============ Markdown rendering styles - Feishu style ============ */
+.markdown-body {
+  /* Feishu font stack: prefer system CJK fonts */
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+               "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  line-height: 1.8;
+  font-size: 15px;
+  color: hsl(var(--foreground));
+  letter-spacing: 0.01em;
+}
+
+/* Headings - Feishu style: no underline, clear hierarchy */
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin-top: 1.8em;
+  margin-bottom: 0.6em;
+  font-weight: 600;
+  line-height: 1.4;
+  color: hsl(var(--foreground));
+  letter-spacing: -0.01em;
+}
+
+.markdown-body h1 {
+  font-size: 1.875em;
+  font-weight: 700;
+  margin-top: 0;
+}
+
+.markdown-body h2 {
+  font-size: 1.5em;
+  font-weight: 600;
+  padding-bottom: 0.4em;
+  border-bottom: 1px solid hsl(var(--border) / 0.6);
+}
+
+.markdown-body h3 {
+  font-size: 1.25em;
+}
+
+.markdown-body h4 {
+  font-size: 1.1em;
+}
+
+.markdown-body h5 {
+  font-size: 1em;
+}
+
+.markdown-body h6 {
+  font-size: 0.95em;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Paragraphs */
+.markdown-body p {
+  margin: 1em 0;
+  line-height: 1.8;
+}
+
+/* Lists - Feishu style: refined bullets */
+.markdown-body ul {
+  padding-left: 1.5em;
+  margin: 1em 0;
+  list-style: none;
+}
+
+.markdown-body ol {
+  padding-left: 1.5em;
+  margin: 1em 0;
+  list-style: none;
+  counter-reset: list-counter;
+}
+
+.markdown-body ul > li {
+  position: relative;
+  margin: 0.5em 0;
+  padding-left: 0.5em;
+}
+
+.markdown-body ul > li::before {
+  content: "";
+  position: absolute;
+  left: -1em;
+  top: 0.65em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: hsl(var(--primary) / 0.7);
+}
+
+.markdown-body ul ul > li::before {
+  background-color: transparent;
+  border: 1.5px solid hsl(var(--primary) / 0.6);
+}
+
+.markdown-body ul ul ul > li::before {
+  border-radius: 0;
+  width: 5px;
+  height: 5px;
+  background-color: hsl(var(--muted-foreground) / 0.5);
+}
+
+.markdown-body ol > li {
+  position: relative;
+  margin: 0.5em 0;
+  padding-left: 0.5em;
+  counter-increment: list-counter;
+}
+
+.markdown-body ol > li::before {
+  content: counter(list-counter) ".";
+  position: absolute;
+  left: -1.5em;
+  color: hsl(var(--primary));
+  font-weight: 500;
+  font-size: 0.9em;
+}
+
+/* Nested lists */
+.markdown-body ul ul,
+.markdown-body ol ol,
+.markdown-body ul ol,
+.markdown-body ol ul {
+  margin: 0.3em 0;
+}
+
+/* Blockquotes - Feishu style: soft background + left border */
+.markdown-body blockquote {
+  margin: 1.2em 0;
+  padding: 1em 1.2em;
+  background-color: hsl(var(--muted) / 0.5);
+  border-left: 3px solid hsl(var(--primary) / 0.7);
+  border-radius: 0 8px 8px 0;
+  color: hsl(var(--foreground) / 0.85);
+  font-style: normal;
+}
+
+.markdown-body blockquote p {
+  margin: 0.5em 0;
+}
+
+.markdown-body blockquote p:first-child {
+  margin-top: 0;
+}
+
+.markdown-body blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* Code blocks - Feishu style: rounded corners + soft background */
+.markdown-body pre {
+  margin: 1.2em 0;
+  padding: 1em 1.2em;
+  background-color: hsl(222 47% 6%);
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.markdown-body pre code {
+  background: transparent;
+  padding: 0;
+  font-size: inherit;
+  font-family: "JetBrains Mono", "Fira Code", "SF Mono", Menlo, Monaco, monospace;
+  color: #e6edf3;
+  line-height: inherit;
+}
+
+/* Inline code */
+.markdown-body code {
+  background-color: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-family: "JetBrains Mono", "Fira Code", "SF Mono", Menlo, Monaco, monospace;
+  font-weight: 500;
+}
+
+/* Tables - Feishu style: rounded corners + zebra stripes + hover */
+.markdown-body table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 1.5em 0;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid hsl(var(--border) / 0.8);
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 0.75em 1em;
+  text-align: left;
+  border-bottom: 1px solid hsl(var(--border) / 0.6);
+}
+
+.markdown-body th {
+  background-color: hsl(var(--muted) / 0.7);
+  font-weight: 600;
+  font-size: 0.9em;
+  text-transform: none;
+  letter-spacing: 0;
+  color: hsl(var(--foreground) / 0.9);
+}
+
+.markdown-body tr:last-child td {
+  border-bottom: none;
+}
+
+.markdown-body tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.markdown-body tbody tr:nth-child(even) {
+  background-color: hsl(var(--muted) / 0.25);
+}
+
+.markdown-body tbody tr:hover {
+  background-color: hsl(var(--primary) / 0.08);
+}
+
+/* Images */
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  margin: 1em 0;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Horizontal rules */
+.markdown-body hr {
+  margin: 2.5em 0;
+  border: none;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    hsl(var(--border) / 0.8) 20%,
+    hsl(var(--border) / 0.8) 80%,
+    transparent
+  );
+}
+
+/* Links - Feishu blue */
+.markdown-body a {
+  color: #3370ff;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.markdown-body a:hover {
+  color: #245bdb;
+  border-bottom-color: #245bdb;
+}
+
+/* Task lists - Feishu style */
+.markdown-body input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid hsl(var(--border));
+  border-radius: 4px;
+  margin-right: 0.5em;
+  vertical-align: middle;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.markdown-body input[type="checkbox"]:checked {
+  background-color: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+}
+
+.markdown-body input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* Keep code highlighting background transparent */
+.markdown-body .hljs {
+  background: transparent;
+}
+
+/* Definition lists */
+.markdown-body dl {
+  margin: 1em 0;
+}
+
+.markdown-body dt {
+  font-weight: 600;
+  margin-top: 1em;
+}
+
+.markdown-body dd {
+  margin-left: 1.5em;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Keyboard keys */
+.markdown-body kbd {
+  display: inline-block;
+  padding: 0.2em 0.5em;
+  font-size: 0.85em;
+  font-family: inherit;
+  background-color: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+  border-radius: 5px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 1px 0 hsl(var(--border));
+}
+
+/* Highlighted/marked text */
+.markdown-body mark {
+  background-color: hsl(48 100% 80%);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+
+/* Strikethrough text */
+.markdown-body del {
+  color: hsl(var(--muted-foreground));
+}
+
+/* ============ Markdown dark theme adjustments ============ */
+.dark .markdown-body pre {
+  background-color: hsl(222 47% 8%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.dark .markdown-body code {
+  background-color: hsl(var(--primary) / 0.15);
+}
+
+.dark .markdown-body blockquote {
+  background-color: hsl(var(--muted) / 0.3);
+}
+
+.dark .markdown-body th {
+  background-color: hsl(var(--muted) / 0.5);
+}
+
+.dark .markdown-body tbody tr:nth-child(even) {
+  background-color: hsl(var(--muted) / 0.15);
+}
+
+.dark .markdown-body tbody tr:hover {
+  background-color: hsl(var(--primary) / 0.1);
+}
+
+.dark .markdown-body table {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.dark .markdown-body img {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+}
+
+.dark .markdown-body a {
+  color: #5b8ff9;
+}
+
+.dark .markdown-body a:hover {
+  color: #85a9f9;
+  border-bottom-color: #85a9f9;
+}
+
+.dark .markdown-body mark {
+  background-color: hsl(48 80% 30%);
+  color: hsl(var(--foreground));
+}
+
+.dark .markdown-body kbd {
+  background-color: hsl(var(--sidebar));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15), 0 1px 0 hsl(var(--border));
+}
+
+/* Dark-mode code highlighting - GitHub Dark overrides */
+.dark .hljs {
+  color: #c9d1d9;
+  background: transparent;
+}
+.dark .hljs-doctag,
+.dark .hljs-keyword,
+.dark .hljs-meta .hljs-keyword,
+.dark .hljs-template-tag,
+.dark .hljs-template-variable,
+.dark .hljs-type,
+.dark .hljs-variable.language_ {
+  color: #ff7b72;
+}
+.dark .hljs-title,
+.dark .hljs-title.class_,
+.dark .hljs-title.class_.inherited__,
+.dark .hljs-title.function_ {
+  color: #d2a8ff;
+}
+.dark .hljs-attr,
+.dark .hljs-attribute,
+.dark .hljs-literal,
+.dark .hljs-meta,
+.dark .hljs-number,
+.dark .hljs-operator,
+.dark .hljs-selector-attr,
+.dark .hljs-selector-class,
+.dark .hljs-selector-id,
+.dark .hljs-variable {
+  color: #79c0ff;
+}
+.dark .hljs-meta .hljs-string,
+.dark .hljs-regexp,
+.dark .hljs-string {
+  color: #a5d6ff;
+}
+.dark .hljs-built_in,
+.dark .hljs-symbol {
+  color: #ffa657;
+}
+.dark .hljs-code,
+.dark .hljs-comment,
+.dark .hljs-formula {
+  color: #8b949e;
+}
+.dark .hljs-name,
+.dark .hljs-quote,
+.dark .hljs-selector-pseudo,
+.dark .hljs-selector-tag {
+  color: #7ee787;
+}
+.dark .hljs-subst {
+  color: #c9d1d9;
+}
+.dark .hljs-section {
+  color: #1f6feb;
+  font-weight: 700;
+}
+.dark .hljs-bullet {
+  color: #f2cc60;
+}
+.dark .hljs-emphasis {
+  color: #c9d1d9;
+  font-style: italic;
+}
+.dark .hljs-strong {
+  color: #c9d1d9;
+  font-weight: 700;
+}
+.dark .hljs-addition {
+  color: #aff5b4;
+  background-color: #033a16;
+}
+.dark .hljs-deletion {
+  color: #ffdcd7;
+  background-color: #67060c;
+}
+
+/* SyncTeX highlight - editor line highlight */
+.cm-editor .synctex-highlight {
+  background-color: hsl(var(--primary) / 0.3) !important;
+  animation: synctex-fade 2s ease-out forwards;
+}
+
+/* SyncTeX highlight - highlight a specific word in the editor (only the clicked position; does not trigger highlightSelectionMatches) */
+/* Uses CodeMirror Decoration API; highlight follows text changes */
+.cm-editor .synctex-word-highlight {
+  background-color: hsl(var(--primary) / 0.4);
+  border-radius: 3px;
+  box-shadow: 0 0 8px hsl(var(--primary) / 0.3);
+  animation: synctex-word-pulse 0.5s ease-in-out;
+}
+
+@keyframes synctex-word-pulse {
+  0% {
+    background-color: hsl(var(--primary) / 0.6);
+    box-shadow: 0 0 15px hsl(var(--primary) / 0.5);
+  }
+  50% {
+    background-color: hsl(var(--primary) / 0.5);
+    box-shadow: 0 0 10px hsl(var(--primary) / 0.4);
+  }
+  100% {
+    background-color: hsl(var(--primary) / 0.4);
+    box-shadow: 0 0 8px hsl(var(--primary) / 0.3);
+  }
+}
+
+/* SyncTeX highlight - full-page PDF highlight */
+.synctex-pdf-highlight {
+  position: relative;
+  animation: synctex-pdf-glow 2s ease-out forwards;
+}
+
+.synctex-pdf-highlight::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 3px solid hsl(var(--primary));
+  border-radius: 8px;
+  animation: synctex-border-fade 2s ease-out forwards;
+  pointer-events: none;
+}
+
+/* SyncTeX highlight - PDF area highlight (reserved for future use) */
+.synctex-area-highlight {
+  background-color: hsl(var(--primary) / 0.4);
+  border: 2px solid hsl(var(--primary));
+  border-radius: 4px;
+  animation: synctex-area-fade 2.5s ease-out forwards;
+  box-shadow: 0 0 15px hsl(var(--primary) / 0.5);
+}
+
+@keyframes synctex-fade {
+  0% {
+    background-color: hsl(var(--primary) / 0.5);
+  }
+  70% {
+    background-color: hsl(var(--primary) / 0.3);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes synctex-pdf-glow {
+  0% {
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.6);
+  }
+  70% {
+    box-shadow: 0 0 10px hsl(var(--primary) / 0.3);
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+
+@keyframes synctex-border-fade {
+  0% {
+    opacity: 1;
+    border-color: hsl(var(--primary));
+  }
+  70% {
+    opacity: 0.5;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes synctex-area-fade {
+  0% {
+    background-color: hsl(var(--primary) / 0.5);
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.6);
+    opacity: 1;
+  }
+  60% {
+    background-color: hsl(var(--primary) / 0.3);
+    box-shadow: 0 0 10px hsl(var(--primary) / 0.4);
+    opacity: 1;
+  }
+  100% {
+    background-color: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    opacity: 0;
+  }
+}
+
+/* ============ PDF preview text layer styles ============ */
+
+/* PDF page container - font smoothing tweaks */
+.pdfjs-viewer-inner,
+.pdf-page-container {
+  -webkit-font-smoothing: initial;
+  -moz-osx-font-smoothing: initial;
+}
+
+/* PDF annotation layer (for link clicks) */
+.annotation-layer,
+.annotationLayer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  /* width/height are set by JS */
+  overflow: hidden;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.annotation-layer a,
+.annotationLayer a,
+.pdf-annotation-link {
+  pointer-events: all;
+  display: block;
+  position: absolute;
+  cursor: pointer;
+}
+
+/* Link hover effect */
+.annotation-layer a:hover,
+.annotationLayer a:hover,
+.pdf-annotation-link:hover {
+  background-color: hsl(var(--primary) / 0.15);
+  border-radius: 2px;
+}
+
+/* PDF.js official AnnotationLayer styles */
+.annotation-layer section,
+.annotationLayer section {
+  position: absolute;
+  pointer-events: all;
+}
+
+/* ============ PDF.js official TextLayer styles (pdfjs-dist 5.x) ============ */
+/* Reference: https://github.com/nicolo-ribaudo/nicolo-ribaudo.github.io/blob/master/nicolo.dev/pdf.js/pdf_viewer.css */
+
+.text-layer,
+.textLayer {
+  position: absolute;
+  text-align: initial;
+  left: 0;
+  top: 0;
+  /* width/height are set by JS */
+  overflow: visible;
+  opacity: 1;
+  line-height: 1;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  z-index: 2;
+  /* allow text selection */
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.text-layer :is(span, br),
+.textLayer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.text-layer span.markedContent,
+.textLayer span.markedContent {
+  top: 0;
+  height: 0;
+}
+
+.text-layer .highlight,
+.textLayer .highlight {
+  margin: -1px;
+  padding: 1px;
+  background-color: hsl(var(--primary) / 0.3);
+  border-radius: 4px;
+}
+
+.text-layer .highlight.appended,
+.textLayer .highlight.appended {
+  position: initial;
+}
+
+.text-layer .highlight.begin,
+.textLayer .highlight.begin {
+  border-radius: 4px 0 0 4px;
+}
+
+.text-layer .highlight.end,
+.textLayer .highlight.end {
+  border-radius: 0 4px 4px 0;
+}
+
+.text-layer .highlight.middle,
+.textLayer .highlight.middle {
+  border-radius: 0;
+}
+
+.text-layer .highlight.selected,
+.textLayer .highlight.selected {
+  background-color: hsl(var(--primary) / 0.5);
+}
+
+/* Selection highlight - use an explicit color */
+.text-layer ::selection,
+.textLayer ::selection {
+  background: rgba(0, 100, 255, 0.4) !important;
+}
+
+.text-layer span::selection,
+.textLayer span::selection {
+  background: rgba(0, 100, 255, 0.4) !important;
+}
+
+/* endOfContent marker - used internally by PDF.js */
+.text-layer .endOfContent,
+.textLayer .endOfContent {
+  display: block;
+  position: absolute;
+  left: 0;
+  top: 100%;
+  right: 0;
+  bottom: 0;
+  z-index: -1;
+  cursor: default;
+  user-select: none;
+}
+
+.text-layer .endOfContent.active,
+.textLayer .endOfContent.active {
+  top: 0;
+}
+
+/* LaTeX formula hover preview styles */
+.cm-tooltip.cm-tooltip-hover .cm-formula-tooltip {
+  animation: formula-tooltip-fade-in 0.15s ease-out;
+}
+
+@keyframes formula-tooltip-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Formula preview tweaks in dark mode */
+.dark .cm-formula-tooltip {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* KaTeX tweaks inside tooltip */
+.cm-formula-tooltip .katex {
+  font-size: 1.1em;
+}
+
+.cm-formula-tooltip .katex-display {
+  margin: 0;
+}
+
+/* ============ Search panel styles ============ */
+
+/* Search match highlight */
+.cm-searchMatch {
+  background-color: hsl(var(--primary) / 0.25);
+  border-radius: 2px;
+}
+
+/* Currently selected search match */
+.cm-searchMatch-selected {
+  background-color: hsl(var(--primary) / 0.5);
+  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.7);
+}
+
+/* Search panel animation */
+@keyframes search-panel-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.search-panel-enter {
+  animation: search-panel-slide-in 0.15s ease-out forwards;
+}
+
+/* Search panel input styles */
+.search-panel-input {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 13px;
+}
+
+/* Active state for search option buttons */
+.search-option-active {
+  background-color: hsl(var(--primary) / 0.2);
+  color: hsl(var(--primary));
+}
+
+/* Search panel tweaks in dark mode */
+.dark .cm-searchMatch {
+  background-color: hsl(var(--primary) / 0.3);
+}
+
+.dark .cm-searchMatch-selected {
+  background-color: hsl(var(--primary) / 0.5);
+}
+
+/* ============ Glassmorphism system ============ */
+
+/* Base glass card */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.glass-light {
+  background: var(--glass-bg-light);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
+}
+
+.glass-heavy {
+  background: var(--glass-bg-heavy);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Glass hover effect - iOS style: more restrained motion */
+.glass-hover {
+  transition: transform 250ms var(--ease-spring-gentle),
+              box-shadow 250ms var(--ease-spring-gentle),
+              border-color 200ms ease,
+              background 200ms ease;
+}
+
+.glass-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-elevation-3);
+  background: var(--glass-hover);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.glass-hover:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: var(--shadow-elevation-1);
+}
+
+.dark .glass-hover:hover {
+  box-shadow: var(--shadow-elevation-3);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Gradient border effect */
+.border-gradient {
+  position: relative;
+  background: var(--glass-bg);
+  border: none;
+}
+
+.border-gradient::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: var(--gradient-primary);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Glow border effect */
+.glow-border {
+  position: relative;
+}
+
+.glow-border::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: var(--gradient-primary);
+  z-index: -1;
+  opacity: 0;
+  filter: blur(8px);
+  transition: opacity 0.3s ease;
+}
+
+.glow-border:hover::after {
+  opacity: 0.6;
+}
+
+/* Gradient background */
+.bg-mesh {
+  background: var(--gradient-mesh);
+}
+
+.bg-gradient-mesh {
+  background:
+    var(--gradient-mesh),
+    linear-gradient(to bottom right, hsl(var(--background)), hsl(var(--muted)));
+}
+
+/* Animated blob background */
+.bg-blobs {
+  position: relative;
+  overflow: hidden;
+}
+
+.bg-blobs::before,
+.bg-blobs::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.5;
+  animation: blob 7s infinite;
+}
+
+.bg-blobs::before {
+  width: 400px;
+  height: 400px;
+  background: rgba(85, 179, 202, 0.3);
+  top: -100px;
+  left: -100px;
+}
+
+.bg-blobs::after {
+  width: 350px;
+  height: 350px;
+  background: rgba(132, 224, 212, 0.3);
+  bottom: -100px;
+  right: -100px;
+  animation-delay: 2s;
+}
+
+.dark .bg-blobs::before {
+  background: rgba(85, 179, 202, 0.15);
+}
+
+.dark .bg-blobs::after {
+  background: rgba(132, 224, 212, 0.15);
+}
+
+/* Grid background */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(128, 128, 128, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(128, 128, 128, 0.05) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* ============ Button effects ============ */
+
+/* Gradient button base - iOS style: restrained and refined */
+.btn-gradient {
+  background: var(--gradient-primary);
+  color: white;
+  border: none;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-elevation-2);
+  transition: box-shadow 200ms var(--ease-spring-gentle),
+              filter 200ms var(--ease-spring-gentle),
+              transform 200ms var(--ease-spring-gentle);
+}
+
+.btn-gradient:hover {
+  box-shadow: var(--shadow-elevation-3);
+  filter: brightness(1.05);
+}
+
+.btn-gradient:active {
+  transform: scale(0.97);
+  box-shadow: var(--shadow-elevation-1);
+  filter: brightness(0.95);
+}
+
+/* Button shimmer effect */
+.btn-shimmer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 100%
+  );
+  animation: btn-shimmer 2s linear infinite;
+}
+
+/* AI button - iOS style */
+.btn-ai {
+  background: var(--gradient-ai);
+  color: white;
+  border: none;
+  position: relative;
+  box-shadow: var(--shadow-elevation-2);
+  transition: box-shadow 200ms var(--ease-spring-gentle),
+              filter 200ms var(--ease-spring-gentle),
+              transform 200ms var(--ease-spring-gentle);
+}
+
+.btn-ai:hover {
+  box-shadow: 0 4px 12px rgba(129, 140, 248, 0.25), var(--shadow-elevation-3);
+  filter: brightness(1.05);
+}
+
+.btn-ai:active {
+  transform: scale(0.97);
+  box-shadow: var(--shadow-elevation-1);
+  filter: brightness(0.95);
+}
+
+/* AI pulse effect */
+.ai-pulse {
+  animation: ai-pulse 2s ease-in-out infinite;
+}
+
+/* ============ Text effects ============ */
+
+/* Gradient text */
+.text-gradient {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-ai {
+  background: var(--gradient-ai);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ============ Transitions ============ */
+
+/* Smooth page transition */
+.page-transition {
+  animation: fade-in-up 0.4s ease-out;
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Modal animations */
+.modal-enter {
+  animation: scale-in 0.2s ease-out;
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Collapsible section animation */
+.collapsible-content {
+  overflow: hidden;
+  transition: height 0.2s ease-out, opacity 0.2s ease-out;
+}
+
+.collapsible-content[data-state="closed"] {
+  height: 0;
+  opacity: 0;
+}
+
+.collapsible-content[data-state="open"] {
+  opacity: 1;
+}
+
+/* Hide error elements auto-inserted when Mermaid rendering fails */
+#d,
+[id^="mermaid-"] + svg[aria-roledescription="error"],
+svg[aria-roledescription="error"],
+.error-icon,
+.mermaid .error-text,
+.mermaid .error-icon {
+  display: none !important;
+}
+
+/* ==================== Deep Research report performance optimizations ==================== */
+
+/* Use content-visibility so the browser skips rendering offscreen elements */
+.prose > *,
+.prose-sm > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 100px; /* Estimated height to avoid scrollbar jumps */
+}
+
+/* Use a larger estimated height for large elements like tables/code blocks/images */
+.prose table,
+.prose pre,
+.prose img,
+.prose-sm table,
+.prose-sm pre,
+.prose-sm img {
+  contain-intrinsic-size: auto 300px;
+}
+
+/* Estimated height for Mermaid diagrams */
+.prose .mermaid,
+.prose-sm .mermaid {
+  contain-intrinsic-size: auto 400px;
+}
+
+/* KaTeX math optimization - disable unnecessary animations */
+.katex,
+.katex-display {
+  will-change: auto; /* Avoid unnecessary compositing layers */
+}
+
+/* Paragraph optimization in long documents */
+.prose p,
+.prose-sm p {
+  contain: content; /* Isolate layout calculations */
+}
+
+/* List item optimization */
+.prose li,
+.prose-sm li {
+  contain: content;
+}
+
+/* Chunked Markdown sections */
+.markdown-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 500px; /* Estimated height per section */
+}
+
+/* Keep paragraph spacing when chunk-rendering */
+.markdown-section + .markdown-section {
+  margin-top: 0; /* spacing controlled by prose classes */
+}

@@ -1,0 +1,23 @@
+services:
+  compile-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT=3002
+      - COMPILE_DIR=/tmp/latex-compile
+      - TEXLIVE_BIN=/usr/bin
+    volumes:
+      - compile-cache:/tmp/latex-compile
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  compile-cache:

@@ -1,0 +1,31 @@
+# Litewrite AI Server Development Environment Dockerfile
+# Supports hot reload, code is mounted via volume
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy dependency files
+COPY requirements.txt .
+
+# Install dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir uvicorn[standard]
+
+# Code is mounted via volume, no COPY needed
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV ENV=development
+
+EXPOSE 6612
+
+# Use uvicorn --reload for hot reload
+CMD ["uvicorn", "main:app", "--reload", "--host", "0.0.0.0", "--port", "6612"]

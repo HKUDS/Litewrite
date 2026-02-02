@@ -1,0 +1,283 @@
+# ==============================================================================
+# Litewrite development Docker Compose configuration
+# ==============================================================================
+#
+# All services run inside Docker. Code is mounted via volumes for hot reload.
+# The architecture matches production to ensure consistent behavior.
+#
+# Start all services:
+#   docker compose up
+#
+# Start in detached mode:
+#   docker compose up -d
+#
+# View logs:
+#   docker compose logs -f web
+#   docker compose logs -f ai-server
+#
+# Rebuild images:
+#   docker compose up --build
+#
+# ==============================================================================
+
+services:
+  # ============================================================================
+  # Next.js main app (development + hot reload)
+  # ============================================================================
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: litewrite-web
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount code directories for hot reload
+      - ./app:/app/app
+      - ./components:/app/components
+      - ./lib:/app/lib
+      - ./hooks:/app/hooks
+      - ./contexts:/app/contexts
+      - ./stores:/app/stores
+      - ./types:/app/types
+      - ./messages:/app/messages
+      - ./public:/app/public
+      - ./prisma:/app/prisma
+      - ./server:/app/server
+      - ./middleware.ts:/app/middleware.ts
+      # Exclude node_modules and .next (use container versions)
+    environment:
+      - NODE_ENV=development
+      - NEXT_TELEMETRY_DISABLED=1
+      # Database
+      - DATABASE_URL=file:/app/prisma/dev.db
+      # Redis (optional; enables rate limiting + yjs persistence when set)
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      # NextAuth
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-dev-secret-change-me}
+      - AUTH_TRUST_HOST=true
+      # Internal service connections (Docker network)
+      - COMPILE_SERVER_URL=http://compile:3002
+      - WS_SERVER_URL=http://ws:1234
+      - NEXT_PUBLIC_WS_URL=ws://localhost:1234
+      # AI Server connections
+      - AI_SERVER_URL=http://ai-server:6612
+      - TAP_SERVER_URL=http://ai-server:6612
+      - ASK_SERVER_URL=http://ai-server:6612
+      # S3/MinIO storage
+      - STORAGE_PROVIDER=s3
+      - S3_ENDPOINT=http://minio:9000
+      - S3_BUCKET=litewrite
+      - S3_REGION=us-east-1
+      - S3_ACCESS_KEY_ID=minioadmin
+      - S3_SECRET_ACCESS_KEY=minioadmin
+      - S3_FORCE_PATH_STYLE=true
+      # AI config (loaded from .env)
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_API_KEYS=${OPENROUTER_API_KEYS:-}
+      - OPENROUTER_KEY_STRATEGY=${OPENROUTER_KEY_STRATEGY:-round_robin}
+      # Deep Research dependencies
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
+      - SERPER_API_KEY=${SERPER_API_KEY:-}
+      # Internal API auth
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-dev-internal-secret}
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      compile:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - litewrite-network
+
+  # ============================================================================
+  # WebSocket collaboration server (development + hot reload)
+  # ============================================================================
+  ws:
+    build:
+      context: .
+      dockerfile: Dockerfile.ws.dev
+    container_name: litewrite-ws
+    ports:
+      - "1234:1234"
+    volumes:
+      # Mount code directories for hot reload
+      - ./server:/app/server
+      - ./lib:/app/lib
+    environment:
+      - NODE_ENV=development
+      - WS_PORT=1234
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-dev-internal-secret}
+      # Redis (optional; enables yjs persistence when set)
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - litewrite-network
+
+  # ============================================================================
+  # AI Server (development + hot reload)
+  # ============================================================================
+  ai-server:
+    build:
+      context: ./ai-server
+      dockerfile: Dockerfile.dev
+    container_name: litewrite-ai-server
+    ports:
+      - "6612:6612"
+    volumes:
+      # Mount code directory for hot reload
+      - ./ai-server:/app
+    environment:
+      - ENV=development
+      - PYTHONUNBUFFERED=1
+      # Enable Chat Agent debug logs in development
+      - CHAT_DEBUG=1
+      # Redis (optional; caching / rate limit infra)
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      # S3 config (MinIO)
+      - S3_ENDPOINT=http://minio:9000
+      - S3_BUCKET=litewrite
+      - S3_REGION=us-east-1
+      - S3_ACCESS_KEY_ID=minioadmin
+      - S3_SECRET_ACCESS_KEY=minioadmin
+      # Rate limiting config (relaxed in development)
+      - RATE_LIMIT_ENABLED=false
+      - RATE_LIMIT_PER_MINUTE=120
+      # LLM config (loaded from .env)
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_API_KEYS=${OPENROUTER_API_KEYS:-}
+      - OPENROUTER_KEY_STRATEGY=${OPENROUTER_KEY_STRATEGY:-round_robin}
+      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      - LLM_MODEL=${LLM_MODEL:-openai/gpt-4o-mini}
+      # Embedding config
+      - EMBEDDING_API_BASE=${EMBEDDING_API_BASE:-https://api.openai.com/v1}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+      # Web Search config
+      - SERPER_API_KEY=${SERPER_API_KEY:-}
+      # WebSocket service URL (internal)
+      - WS_HTTP_URL=http://ws:1234
+      # Internal API auth
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-dev-internal-secret}
+      - NEXTJS_API_URL=http://web:3000
+    depends_on:
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - litewrite-network
+
+  # ============================================================================
+  # LaTeX compile service
+  # ============================================================================
+  compile:
+    build:
+      context: ./compile-server
+      dockerfile: Dockerfile
+    container_name: litewrite-compile
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT=3002
+      - COMPILE_DIR=/tmp/latex-compile
+    volumes:
+      - compile-cache:/tmp/latex-compile
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - litewrite-network
+
+  # ============================================================================
+  # Redis (optional; collaboration persistence / rate limiting / caching)
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: litewrite-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - litewrite-network
+
+  # ============================================================================
+  # MinIO object storage (S3 compatible)
+  # ============================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: litewrite-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 10s
+    networks:
+      - litewrite-network
+
+  # MinIO init (create bucket)
+  minio-init:
+    image: minio/mc:latest
+    container_name: litewrite-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      mc mb myminio/litewrite --ignore-existing;
+      mc anonymous set download myminio/litewrite/avatars;
+      mc anonymous set download myminio/litewrite/template-previews;
+      echo 'MinIO bucket initialized';
+      "
+    networks:
+      - litewrite-network
+
+# ==============================================================================
+# Volumes
+# ==============================================================================
+volumes:
+  minio-data:
+    driver: local
+  compile-cache:
+    driver: local
+  redis-data:
+    driver: local
+
+# ==============================================================================
+# Networks
+# ==============================================================================
+networks:
+  litewrite-network:
+    name: litewrite-network
+    driver: bridge

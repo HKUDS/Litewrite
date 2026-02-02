@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  node-checks:
+    name: Node checks (typecheck, build, scans)
+    runs-on: ubuntu-latest
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci --legacy-peer-deps
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Scan for non-i18n Chinese
+        run: npm run scan:chinese
+
+      - name: Brand guard (Litewrite only)
+        run: |
+          set -euo pipefail
+          if grep -RIn --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=.github --fixed-strings "LiteWrite" .; then
+            echo
+            echo "Found forbidden brand string: LiteWrite"
+            echo "Please use: Litewrite"
+            exit 1
+          fi
+
+  docker-and-compose:
+    name: Docker/Compose validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Docker version
+        run: docker version
+
+      - name: Compose config (dev + prod)
+        run: |
+          set -euo pipefail
+          if docker compose version >/dev/null 2>&1; then
+            docker compose -f docker-compose.yml config >/dev/null
+            docker compose -f docker-compose.prod.yml config >/dev/null
+          else
+            docker-compose -f docker-compose.yml config >/dev/null
+            docker-compose -f docker-compose.prod.yml config >/dev/null
+          fi
+
+      - name: Docker build (web, ws, ai-server, compile)
+        run: |
+          set -euo pipefail
+          docker build -f Dockerfile .
+          docker build -f Dockerfile.ws .
+          docker build -f ai-server/Dockerfile ai-server
+          docker build -f compile-server/Dockerfile compile-server

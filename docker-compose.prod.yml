@@ -1,0 +1,303 @@
+# Litewrite production Docker Compose configuration
+#
+# Start:
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# View logs:
+#   docker compose -f docker-compose.prod.yml logs -f
+#
+# Stop:
+#   docker compose -f docker-compose.prod.yml down
+
+services:
+  # ============================================
+  # Next.js main app
+  # ============================================
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: litewrite-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      # Database (injected via .env.production / .env.secrets)
+      # - SQLite: file:/app/data/litewrite.db
+      - DATABASE_URL=${DATABASE_URL}
+      # Redis (optional; enables rate limiting + yjs persistence when set)
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      # NextAuth
+      - NEXTAUTH_URL=${NEXTAUTH_URL}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - AUTH_TRUST_HOST=true
+      # Internal service connections
+      - COMPILE_SERVER_URL=http://compile:3002
+      - WS_SERVER_URL=http://ws:1234
+      - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
+      # AI Server connections
+      - AI_SERVER_URL=http://ai-server:6612
+      - TAP_SERVER_URL=http://nginx:80
+      - ASK_SERVER_URL=http://nginx:80
+      # AWS S3 storage
+      - STORAGE_PROVIDER=s3
+      - S3_BUCKET=${S3_BUCKET}
+      - S3_REGION=${S3_REGION}
+      - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID:-}
+      - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY:-}
+      # AI service (required by features like AI Draw)
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_API_KEYS=${OPENROUTER_API_KEYS:-}
+      - OPENROUTER_KEY_STRATEGY=${OPENROUTER_KEY_STRATEGY:-round_robin}
+      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      # Deep Research dependencies
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
+      - SERPER_API_KEY=${SERPER_API_KEY:-}
+      # Internal API auth (AI Server <-> Next.js)
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-}
+      # Auth config
+      # OAuth removed in OSS variant
+    volumes:
+      # SQLite database - bind-mount to host path for easy script access
+      - ${DATABASE_PATH:-./prisma}:/app/data
+    depends_on:
+      compile:
+        condition: service_healthy
+      ai-server:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # The runner image may not include wget/curl; use Node's built-in fetch for health checks
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/auth/session').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - litewrite-network
+
+  # ============================================
+  # Prisma migration task (for production schema changes)
+  # ============================================
+  # The runner image (standalone) does not include Prisma CLI, so we use the builder target as a one-off task image.
+  # Run on server:
+  #   docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.secrets run --rm migrate
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    command: ["npx", "prisma", "migrate", "deploy"]
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+    networks:
+      - litewrite-network
+
+  # ============================================
+  # WebSocket collaboration server
+  # ============================================
+  ws:
+    build:
+      context: .
+      dockerfile: Dockerfile.ws
+    container_name: litewrite-ws
+    restart: unless-stopped
+    ports:
+      - "1234:1234"
+    environment:
+      - NODE_ENV=production
+      - WS_PORT=1234
+      # Internal API auth (for /clear, etc.)
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-}
+      # Redis (optional; enables yjs persistence when set)
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # The ws image may not include wget/curl; use Node's built-in fetch for health checks
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:1234/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - litewrite-network
+
+  # ============================================
+  # LaTeX compile service
+  # ============================================
+  compile:
+    build:
+      context: ./compile-server
+      dockerfile: Dockerfile
+    container_name: litewrite-compile
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT=3002
+      - COMPILE_DIR=/tmp/latex-compile
+      # Compile config (override via env vars)
+      - COMPILE_TIMEOUT=${COMPILE_TIMEOUT:-300000}
+      - MAX_CONCURRENT_COMPILES=${MAX_CONCURRENT_COMPILES:-10}
+      - MAX_QUEUE_SIZE=${MAX_QUEUE_SIZE:-30}
+      - QUEUE_TIMEOUT=${QUEUE_TIMEOUT:-60000}
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-209715200}
+      - MAX_SINGLE_FILE_SIZE=${MAX_SINGLE_FILE_SIZE:-52428800}
+      - MAX_FILE_COUNT=${MAX_FILE_COUNT:-1000}
+    volumes:
+      - compile-cache:/tmp/latex-compile
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - litewrite-network
+
+  # ============================================
+  # AI services (TAP completion, Ask, etc.) - scalable
+  # ============================================
+  # Scale command: docker compose -f docker-compose.prod.yml up -d --scale ai-server=4
+  ai-server:
+    build:
+      context: ./ai-server
+      dockerfile: Dockerfile
+    # Do not set container_name to allow scaling multiple instances
+    restart: unless-stopped
+    environment:
+      # Environment
+      - ENV=production
+      - PYTHONUNBUFFERED=1
+      # Redis (required for rate limiting when enabled)
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      # OpenRouter API (primary LLM calls, supports key rotation)
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENROUTER_API_KEYS=${OPENROUTER_API_KEYS:-}
+      - OPENROUTER_KEY_STRATEGY=${OPENROUTER_KEY_STRATEGY:-round_robin}
+      - OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+      # Embedding API
+      - EMBEDDING_API_BASE=${EMBEDDING_API_BASE}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+      # Web search
+      - SERPER_API_KEY=${SERPER_API_KEY}
+      # Model config
+      - LLM_MODEL=${LLM_MODEL:-google/gemini-3-flash-preview}
+      # TAP completion config
+      - TAP_MODEL=${TAP_MODEL:-}
+      - TAP_API_KEY=${TAP_API_KEY:-}
+      # S3 cache
+      - CACHE_PROVIDER=s3
+      - S3_BUCKET=${S3_BUCKET}
+      - S3_REGION=${S3_REGION}
+      - S3_ACCESS_KEY_ID=${S3_ACCESS_KEY_ID:-}
+      - S3_SECRET_ACCESS_KEY=${S3_SECRET_ACCESS_KEY:-}
+      # WebSocket service URL (internal)
+      - WS_HTTP_URL=http://ws:1234
+      # Internal API auth (AI Server <-> Next.js)
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-}
+      - NEXTJS_API_URL=http://web:3000
+      # Worker config
+      - WORKERS=4
+      - WORKER_TIMEOUT=120
+      # Rate limiting config
+      - RATE_LIMIT_ENABLED=${RATE_LIMIT_ENABLED:-true}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-60}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:6612/health/live')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - litewrite-network
+
+  # ============================================
+  # Redis (optional; collaboration persistence / rate limiting / caching)
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: litewrite-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - litewrite-network
+
+  # ============================================
+  # Nginx load balancer (AI Server)
+  # ============================================
+  nginx:
+    image: nginx:alpine
+    container_name: litewrite-nginx
+    restart: unless-stopped
+    ports:
+      - "6612:80"  # AI Server external port
+    volumes:
+      - ./ai-server/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - ai-server
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - litewrite-network
+
+# ============================================
+# Volumes
+# ============================================
+volumes:
+  # Note: database uses bind mount instead of a volume for easier script access
+  # litewrite-data removed; use ${DATABASE_PATH:-./prisma}:/app/data
+  compile-cache:
+    driver: local
+  redis-data:
+    driver: local
+
+# ============================================
+# Network
+# ============================================
+networks:
+  litewrite-network:
+    name: litewrite-network
+    driver: bridge
