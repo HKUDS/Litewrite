@@ -18,6 +18,11 @@
 </p>
 
 <p align="center">
+  <a href="https://discord.gg/M88Y27DDEe"><img src="https://img.shields.io/badge/💬Discord-Community-7289da?style=for-the-badge&logo=discord&logoColor=white&labelColor=1a1a2e"></a>
+  <a href="https://github.com/HKUDS/Litewrite/issues/4"><img src="https://img.shields.io/badge/💬WeChat-Group-07c160?style=for-the-badge&logo=wechat&logoColor=white&labelColor=1a1a2e"></a>
+</p>
+
+<p align="center">
   <a href="https://litewrite.ai"><img src="https://img.shields.io/badge/🌐_Live_Demo-litewrite.ai-ff6b6b?style=for-the-badge" alt="Demo" /></a>
 </p>
 
