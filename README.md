@@ -2,10 +2,10 @@
   <img src="public/logo.svg" alt="Litewrite Logo" width="120" />
 </p>
 
-<h1 align="center">Litewrite</h1>
+<h1 align="center">Litewrite: Vibe Writing is Coming!</h1>
 
 <p align="center">
-  <strong>A modern, AI-native online LaTeX collaborative writing platform</strong><br>
+  <strong>Your Personal Writing Assistant</strong><br>
 </p>
 
 <p align="center">
