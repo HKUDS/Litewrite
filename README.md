@@ -2,7 +2,7 @@
   <img src="public/logo.svg" alt="Litewrite Logo" width="120" />
 </p>
 
-<h1 align="center">Vibe Writing is Coming! Write Faster and Better!</h1>
+<h1 align="center">Litewrite: Vibe Writing is Coming - Write Faster and Better!</h1>
 
 <p align="center">
   <strong>Litewrite: Your Personal Writing Assistant</strong><br>
