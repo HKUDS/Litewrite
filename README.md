@@ -43,7 +43,7 @@
 
 💬 **ASK Mode**: Summon your AI assistant anytime. Grammar issues? Format problems? Just ask!
 
-🤖 **Agent Mode**: The ultimate hands-off experience! AI automatically edits, polishes, formats, or lets the Agent take creative control!
+🤖 **Agent Mode**: The ultimate hands-off experience! AI automatically edits, polishes, formats, or lets the Agent take control!
 
 🔍 **Deep Research**: AI conducts in-depth research + auto-generates reports. Research while you write! 👨‍🏫
 
