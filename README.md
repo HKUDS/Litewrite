@@ -36,7 +36,12 @@
 
 ---
 
-## ✨ Features
+## ✨ Key Features of Litewrite
+
+🚀 **TAP Smart Completion**: Type a few words, AI continues writing for you. Just hit Tab and you're all set!
+💬 **ASK Mode**: Summon your AI assistant anytime. Grammar issues? Format problems? Just ask!
+🤖 **Agent Mode**: The ultimate hands-off experience! AI automatically edits, polishes, formats, or lets the Agent take creative control
+🔍 **Deep Research**: AI conducts in-depth research + auto-generates reports. Research while you write! 👨‍🏫
 
 ### 📝 Editor Experience
 
