@@ -168,7 +168,7 @@ See `env.example.oss` for the complete configuration reference.
 
 <table>
 <tr>
-<td width="50%">
+<td>
 
 ### Frontend
 - **Framework:** Next.js 14 (App Router)
@@ -178,7 +178,7 @@ See `env.example.oss` for the complete configuration reference.
 - **Icons:** Lucide React
 
 </td>
-<td width="50%">
+<td>
 
 ### Backend
 - **API:** Next.js API Routes
