@@ -46,42 +46,6 @@
 
 🔍 **Deep Research**: AI conducts in-depth research + auto-generates reports. Research while you write! 👨‍🏫
 
-### 📝 Editor Experience
-
-| Feature | Description |
-|---------|-------------|
-| **LaTeX Editor** | Built on CodeMirror 6 with syntax highlighting, smart completion, bracket matching, and folding |
-| **Markdown Editor** | Full GFM support with code highlighting, math rendering (KaTeX), and live preview |
-| **Visual Editing** | Typora-like WYSIWYG: renders content while editing, shows source at cursor position |
-| **Multi-file Projects** | Organize large documents with `\input{}`, `\include{}`, and proper file tree management |
-
-### 🤖 AI-Powered Writing
-
-| Feature | Description |
-|---------|-------------|
-| **TAP Completion** | Ghost-text AI completion as you type (Cursor/Copilot-like experience) |
-| **Ask AI** | Select text and ask AI to explain, improve, translate, or rewrite |
-| **Deep Research** | Multi-iteration research: web search → outline planning → streamed report generation |
-| **Smart Templates** | AI-assisted document generation from simple prompts |
-
-### 👥 Collaboration & Sharing
-
-| Feature | Description |
-|---------|-------------|
-| **Real-time Collaboration** | Multiple users editing simultaneously with cursor presence indicators |
-| **Version History** | Create snapshots, compare diffs, and restore any previous version |
-| **Sharing** | Share projects via link with granular view/edit permissions |
-| **Comments** | (Coming soon) Inline comments and review workflow |
-
-### 📄 Compilation & Preview
-
-| Feature | Description |
-|---------|-------------|
-| **Multiple Engines** | pdfLaTeX, XeLaTeX, LuaLaTeX with full TeXLive distribution |
-| **Live Preview** | Auto-compile on save with instant PDF preview |
-| **SyncTeX** | Bi-directional navigation: click PDF → jump to source, click source → highlight PDF |
-| **Export Options** | Download PDF, source ZIP, or individual files |
-
 ---
 
 ## 📸 Screenshots
@@ -130,6 +94,14 @@
 </details>
 
 > 💡 **Try it yourself:** Visit [litewrite.ai](https://litewrite.ai) for the live demo!
+
+---
+
+## 🏗 Architecture
+
+<p align="center">
+  <img src="public/Architecture.png" alt="Litewrite Architecture" width="800" />
+</p>
 
 ---
 
@@ -192,8 +164,6 @@ See `env.example.oss` for the complete configuration reference.
 
 ---
 
-
-
 ## 🛠 Tech Stack
 
 <table>
@@ -242,11 +212,41 @@ See `env.example.oss` for the complete configuration reference.
 
 ---
 
-## 🏗 Architecture
+### 📝 Editor Experience
 
-<p align="center">
-  <img src="public/Architecture.png" alt="Litewrite Architecture" width="800" />
-</p>
+| Feature | Description |
+|---------|-------------|
+| **LaTeX Editor** | Built on CodeMirror 6 with syntax highlighting, smart completion, bracket matching, and folding |
+| **Markdown Editor** | Full GFM support with code highlighting, math rendering (KaTeX), and live preview |
+| **Visual Editing** | Typora-like WYSIWYG: renders content while editing, shows source at cursor position |
+| **Multi-file Projects** | Organize large documents with `\input{}`, `\include{}`, and proper file tree management |
+
+### 🤖 AI-Powered Writing
+
+| Feature | Description |
+|---------|-------------|
+| **TAP Completion** | Ghost-text AI completion as you type (Cursor/Copilot-like experience) |
+| **Ask AI** | Select text and ask AI to explain, improve, translate, or rewrite |
+| **Deep Research** | Multi-iteration research: web search → outline planning → streamed report generation |
+| **Smart Templates** | AI-assisted document generation from simple prompts |
+
+### 👥 Collaboration & Sharing
+
+| Feature | Description |
+|---------|-------------|
+| **Real-time Collaboration** | Multiple users editing simultaneously with cursor presence indicators |
+| **Version History** | Create snapshots, compare diffs, and restore any previous version |
+| **Sharing** | Share projects via link with granular view/edit permissions |
+| **Comments** | (Coming soon) Inline comments and review workflow |
+
+### 📄 Compilation & Preview
+
+| Feature | Description |
+|---------|-------------|
+| **Multiple Engines** | pdfLaTeX, XeLaTeX, LuaLaTeX with full TeXLive distribution |
+| **Live Preview** | Auto-compile on save with instant PDF preview |
+| **SyncTeX** | Bi-directional navigation: click PDF → jump to source, click source → highlight PDF |
+| **Export Options** | Download PDF, source ZIP, or individual files |
 
 ---
 
