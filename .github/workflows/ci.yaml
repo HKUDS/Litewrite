@@ -70,10 +70,11 @@ jobs:
             docker-compose -f docker-compose.prod.yml config >/dev/null
           fi
 
-      - name: Docker build (web, ws, ai-server, compile)
+      - name: Docker build (web, ws, ai-server, nanobot, compile)
         run: |
           set -euo pipefail
           docker build -f Dockerfile .
           docker build -f Dockerfile.ws .
           docker build -f ai-server/Dockerfile ai-server
+          docker build -f nanobot/Dockerfile nanobot
           docker build -f compile-server/Dockerfile compile-server

@@ -1,0 +1,22 @@
+# ==============================================================================
+# Litewrite nanobot Service Dockerfile (Development)
+# ==============================================================================
+# Hot-reload via volume mounts in docker-compose.yml
+# ==============================================================================
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy application code (overridden by volume mount in dev)
+COPY . .
+
+ENV PYTHONUNBUFFERED=1
+
+# Start with auto-reload-friendly wrapper
+CMD ["python", "main.py"]

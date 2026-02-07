@@ -245,6 +245,35 @@ services:
     networks:
       - litewrite-network
 
+  # ============================================================================
+  # nanobot AI assistant (Feishu bot + Litewrite integration)
+  # ============================================================================
+  nanobot:
+    build:
+      context: ./nanobot
+      dockerfile: Dockerfile.dev
+    container_name: litewrite-nanobot
+    volumes:
+      - nanobot-data:/root/.nanobot
+      # Mount source for hot reload during development
+      - ./nanobot:/app
+    environment:
+      # Litewrite integration
+      - NANOBOT__LITEWRITE__URL=http://web:3000
+      - NANOBOT__LITEWRITE__API_SECRET=${INTERNAL_API_SECRET:-dev-internal-secret}
+      # Feishu channel
+      - NANOBOT__CHANNELS__FEISHU__ENABLED=${FEISHU_ENABLED:-false}
+      - NANOBOT__CHANNELS__FEISHU__APP_ID=${FEISHU_APP_ID:-}
+      - NANOBOT__CHANNELS__FEISHU__APP_SECRET=${FEISHU_APP_SECRET:-}
+      - NANOBOT__CHANNELS__FEISHU__DEFAULT_LITEWRITE_USER_ID=${NANOBOT_DEFAULT_LITEWRITE_USER_ID:-}
+      # LLM provider
+      - NANOBOT__PROVIDERS__OPENROUTER__API_KEY=${OPENROUTER_API_KEY:-}
+    depends_on:
+      - web
+    restart: unless-stopped
+    networks:
+      - litewrite-network
+
   # MinIO init (create bucket)
   minio-init:
     image: minio/mc:latest
@@ -272,6 +301,8 @@ volumes:
   compile-cache:
     driver: local
   redis-data:
+    driver: local
+  nanobot-data:
     driver: local
 
 # ==============================================================================

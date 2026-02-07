@@ -43,6 +43,7 @@ echo "  - WS (Yjs):       ws://localhost:1234"
 echo "  - AI Server:      http://localhost:6612/health"
 echo "  - Compile Server: http://localhost:3002/health"
 echo "  - MinIO Console:  http://localhost:9001 (minioadmin/minioadmin)"
+echo "  - nanobot:        docker logs litewrite-nanobot (Feishu bot)"
 echo
 echo "Tip: run in background:"
 echo "  ./scripts/up-dev.sh -d"
