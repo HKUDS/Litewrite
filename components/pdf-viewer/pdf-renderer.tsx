@@ -199,11 +199,18 @@ export const PdfRenderer = forwardRef<PdfRendererHandle, PdfRendererProps>(({
 
     initPdfJs();
 
+    // Capture ref values so the cleanup function uses the snapshot
+    const canvasRefsValue = canvasRefs.current;
+    const textLayerRefsValue = textLayerRefs.current;
+    const annotationLayerRefsValue = annotationLayerRefs.current;
+    const pageRefsValue = pageRefs.current;
+    const pageSizesRefValue = pageSizesRef.current;
+
     // Cleanup: release references and clear canvases
     return () => {
       mounted = false;
       // Clear canvas contexts
-      canvasRefs.current.forEach((canvas) => {
+      canvasRefsValue.forEach((canvas) => {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -211,11 +218,11 @@ export const PdfRenderer = forwardRef<PdfRendererHandle, PdfRendererProps>(({
         canvas.width = 0;
         canvas.height = 0;
       });
-      canvasRefs.current.clear();
-      textLayerRefs.current.clear();
-      annotationLayerRefs.current.clear();
-      pageRefs.current.clear();
-      pageSizesRef.current.clear();
+      canvasRefsValue.clear();
+      textLayerRefsValue.clear();
+      annotationLayerRefsValue.clear();
+      pageRefsValue.clear();
+      pageSizesRefValue.clear();
     };
   }, [pdfUrl, onLoadSuccess]);
 
@@ -572,7 +579,7 @@ export const PdfRenderer = forwardRef<PdfRendererHandle, PdfRendererProps>(({
       console.error(`[PdfRenderer] Render page ${pageNumber} error:`, err);
       return false;
     }
-  }, [pdfDoc]);
+  }, [pdfDoc, t]);
 
   // Process render queue
   const processRenderQueue = useCallback(async () => {

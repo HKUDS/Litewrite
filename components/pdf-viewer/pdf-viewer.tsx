@@ -149,7 +149,7 @@ export function PdfViewer({
       setSyncTexStatus(t("pdfViewer.syncTex.locatedToPage", { page: syncTexTarget.page }));
       setTimeout(() => setSyncTexStatus(null), 3000);
     }
-  }, [syncTexTarget]);
+  }, [syncTexTarget, t]);
 
   // Handle PDF clicks (SyncTeX backward sync)
   const handlePageClick = useCallback(async (
@@ -208,7 +208,7 @@ export function PdfViewer({
       setSyncTexStatus(t("syncTex.queryFailed"));
       setTimeout(() => setSyncTexStatus(null), 3000);
     }
-  }, [projectId, onSyncTexJump]);
+  }, [projectId, onSyncTexJump, t]);
 
   // Compile button
   const getCompileIcon = () => {
