@@ -42,8 +42,7 @@ export async function POST(request: NextRequest) {
     };
 
     // Build where clause
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const where: any = {
+    const where: Record<string, unknown> = {
       status: { not: "trashed" },
     };
 
@@ -81,8 +80,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = projects.map((p: any) => ({
+    const result = projects.map((p) => ({
       id: p.id,
       name: p.name,
       description: p.description,
