@@ -253,6 +253,7 @@ class ChatService:
         mode: str = "ask",
         conversation_history: Optional[List[Dict[str, Any]]] = None,
         agent_config: Optional[AgentConfig] = None,
+        direct_apply: bool = False,
     ) -> str:
         """
         Run the chat service synchronously (non-streaming).
@@ -264,12 +265,14 @@ class ChatService:
             mode: "ask" or "agent"
             conversation_history: Optional previous conversation history
             agent_config: Optional agent configuration
+            direct_apply: If True, file edits bypass shadow documents and write
+                         directly to storage. Used by nanobot/API consumers.
 
         Returns:
             Final response text
         """
         logger.info(
-            f"[ChatService 1.5] Run sync: project={project_id}, user={user_id}, mode={mode}"
+            f"[ChatService 1.5] Run sync: project={project_id}, user={user_id}, mode={mode}, direct_apply={direct_apply}"
         )
 
         # Create tool context (no emitter for sync mode)
@@ -277,6 +280,7 @@ class ChatService:
             project_id=project_id,
             user_id=user_id,
             mode=mode,
+            direct_apply=direct_apply,
         )
 
         # Create main agent
@@ -396,6 +400,7 @@ async def chat(
     user_id: str,
     query: str,
     mode: str = "ask",
+    direct_apply: bool = False,
     **kwargs,
 ) -> str:
     """
@@ -406,6 +411,7 @@ async def chat(
         user_id: Current user ID
         query: User's input query
         mode: "ask" or "agent"
+        direct_apply: If True, file edits write directly to storage
         **kwargs: Additional arguments passed to run_sync
 
     Returns:
@@ -417,6 +423,7 @@ async def chat(
         user_id=user_id,
         query=query,
         mode=mode,
+        direct_apply=direct_apply,
         **kwargs,
     )
 

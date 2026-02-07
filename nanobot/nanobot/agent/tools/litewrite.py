@@ -1,6 +1,7 @@
 """Litewrite integration tools for managing LaTeX projects."""
 
 import base64
+import mimetypes
 from pathlib import Path
 from typing import Any
 
@@ -228,11 +229,127 @@ class LitewriteEditFileTool(Tool):
         return f"Successfully updated {file_path} ({length} chars)"
 
 
+class LitewriteAgentTool(Tool):
+    """Tool to invoke litewrite's built-in AI agent for writing/editing tasks."""
+
+    def __init__(self, client: LitewriteClient, default_owner_id: str = ""):
+        self._client = client
+        self._default_owner_id = default_owner_id
+
+    @property
+    def name(self) -> str:
+        return "litewrite_agent"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Invoke Litewrite's built-in AI agent to handle complex writing and editing tasks. "
+            "The agent understands LaTeX structure and can read files, plan multi-step edits, "
+            "and apply precise line-based changes. Use this for writing new content, "
+            "rewriting/restructuring sections, complex multi-file edits, or analyzing documents. "
+            "Edits are applied directly to the project files."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "project_id": {
+                    "type": "string",
+                    "description": "The project ID",
+                },
+                "message": {
+                    "type": "string",
+                    "description": (
+                        "The instruction for the agent. Be specific about what to write, "
+                        "edit, or analyze. Examples: 'Add an abstract section to main.tex', "
+                        "'Rewrite the introduction to be more concise', "
+                        "'Fix all citation formatting issues'"
+                    ),
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["agent", "ask"],
+                    "description": (
+                        "Agent mode: 'agent' (default) for editing/writing tasks, "
+                        "'ask' for read-only analysis and Q&A about the project"
+                    ),
+                },
+                "referenced_files": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Optional list of file paths to reference. The agent will "
+                        "prioritize reading these files. E.g. ['main.tex', 'sections/intro.tex']"
+                    ),
+                },
+            },
+            "required": ["project_id", "message"],
+        }
+
+    async def execute(
+        self,
+        project_id: str,
+        message: str,
+        mode: str = "agent",
+        referenced_files: list[str] | None = None,
+        **kwargs: Any,
+    ) -> str:
+        logger.info(
+            f"Invoking Litewrite agent: project={project_id}, mode={mode}, "
+            f"message_len={len(message)}"
+        )
+
+        data: dict[str, Any] = {
+            "projectId": project_id,
+            "message": message,
+            "mode": mode,
+        }
+
+        if self._default_owner_id:
+            data["userId"] = self._default_owner_id
+
+        if referenced_files:
+            data["referencedFiles"] = referenced_files
+
+        try:
+            # Use longer timeout for agent execution (5 minutes)
+            url = f"{self._client.base_url}/api/internal/agent/run"
+            headers = {"X-Internal-Secret": self._client.api_secret}
+
+            async with httpx.AsyncClient(timeout=300) as client:
+                resp = await client.post(url, json=data, headers=headers)
+                result = resp.json()
+        except httpx.TimeoutException:
+            logger.error(f"Litewrite agent timed out for project {project_id}")
+            return (
+                "Error: Litewrite agent execution timed out after 5 minutes. "
+                "The task may be too complex. Try breaking it into smaller steps."
+            )
+        except Exception as e:
+            logger.error(f"Litewrite agent error: {e}")
+            return f"Error invoking Litewrite agent: {str(e)}"
+
+        if not result.get("success"):
+            error = result.get("error", "Unknown error")
+            logger.warning(f"Litewrite agent failed: {error}")
+            return f"Litewrite agent error: {error}"
+
+        response = result.get("response", "")
+        logger.info(
+            f"Litewrite agent completed: response_len={len(response)}"
+        )
+
+        return f"Litewrite agent completed:\n\n{response}"
+
+
 class LitewriteCompileTool(Tool):
     """Tool to compile a Litewrite project and get the PDF."""
 
-    def __init__(self, client: LitewriteClient):
+    def __init__(self, client: LitewriteClient, default_owner_id: str = ""):
         self._client = client
+        self._default_owner_id = default_owner_id
 
     @property
     def name(self) -> str:
@@ -244,6 +361,7 @@ class LitewriteCompileTool(Tool):
             "Compile a Litewrite LaTeX project to PDF. "
             "Supported compilers: pdflatex (default), xelatex, lualatex. "
             "Use xelatex when the document contains Chinese/Japanese/Korean text or uses fontspec/xeCJK packages. "
+            "By default, the project is automatically saved as a version after successful compilation. "
             "Returns the local file path of the compiled PDF. "
             "Use the message tool with the media parameter to send the PDF to the user."
         )
@@ -265,18 +383,27 @@ class LitewriteCompileTool(Tool):
                         "Chinese/Japanese/Korean text or custom fonts. Default: pdflatex"
                     ),
                 },
+                "auto_save": {
+                    "type": "boolean",
+                    "description": (
+                        "Whether to auto-save the project as a version after successful compilation. "
+                        "Default: true"
+                    ),
+                },
             },
             "required": ["project_id"],
         }
 
     async def execute(
-        self, project_id: str, compiler: str = "pdflatex", **kwargs: Any
+        self, project_id: str, compiler: str = "pdflatex", auto_save: bool = True, **kwargs: Any
     ) -> str:
-        logger.info(f"Compiling Litewrite project: {project_id} (compiler={compiler})")
+        logger.info(f"Compiling Litewrite project: {project_id} (compiler={compiler}, auto_save={auto_save})")
 
-        data: dict[str, Any] = {"projectId": project_id}
+        data: dict[str, Any] = {"projectId": project_id, "autoSave": auto_save}
         if compiler and compiler != "pdflatex":
             data["compiler"] = compiler
+        if self._default_owner_id:
+            data["userId"] = self._default_owner_id
 
         result = await self._client.request(
             "/api/internal/projects/compile",
@@ -308,7 +435,724 @@ class LitewriteCompileTool(Tool):
 
         logger.info(f"PDF saved to {pdf_path} ({len(pdf_bytes)} bytes)")
 
+        # Build response with version info
+        lines = [
+            f"Compilation successful. PDF saved to: {pdf_path}",
+            f'Use the message tool with media=["{pdf_path}"] to send it to the user.',
+        ]
+
+        version_saved = result.get("data", {}).get("versionSaved")
+        if version_saved:
+            lines.append(f"Version auto-saved: \"{version_saved.get('name', '')}\"")
+
+        return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Project Management Tools
+# ---------------------------------------------------------------------------
+
+
+class LitewriteCreateProjectTool(Tool):
+    """Tool to create a new Litewrite project."""
+
+    def __init__(self, client: LitewriteClient, default_owner_id: str = ""):
+        self._client = client
+        self._default_owner_id = default_owner_id
+
+    @property
+    def name(self) -> str:
+        return "litewrite_create_project"
+
+    @property
+    def description(self) -> str:
         return (
-            f"Compilation successful. PDF saved to: {pdf_path}\n"
-            f'Use the message tool with media=["{pdf_path}"] to send it to the user.'
+            "Create a new LaTeX project in Litewrite. "
+            "A default main.tex file will be created automatically. "
+            "Use locale='zh' for Chinese documents (uses ctex template with xelatex)."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The project name",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Optional project description",
+                },
+                "locale": {
+                    "type": "string",
+                    "enum": ["en", "zh"],
+                    "description": (
+                        "Template locale: 'en' (default, English template) or "
+                        "'zh' (Chinese template with ctex)"
+                    ),
+                },
+            },
+            "required": ["name"],
+        }
+
+    async def execute(
+        self,
+        name: str,
+        description: str = "",
+        locale: str = "en",
+        **kwargs: Any,
+    ) -> str:
+        data: dict[str, Any] = {"name": name, "locale": locale}
+
+        if description:
+            data["description"] = description
+
+        if self._default_owner_id:
+            data["ownerId"] = self._default_owner_id
+        else:
+            return "Error: Owner ID is not configured. Cannot create project."
+
+        result = await self._client.request("/api/internal/projects/create", data)
+
+        if not result.get("success"):
+            return f"Error creating project: {result.get('error', 'Unknown error')}"
+
+        project = result.get("data", {}).get("project", {})
+        return (
+            f"Project created successfully:\n"
+            f"- ID: {project.get('id')}\n"
+            f"- Name: {project.get('name')}\n"
+            f"- Created: {project.get('createdAt')}"
+        )
+
+
+class LitewriteDeleteProjectTool(Tool):
+    """Tool to delete a Litewrite project."""
+
+    def __init__(self, client: LitewriteClient):
+        self._client = client
+
+    @property
+    def name(self) -> str:
+        return "litewrite_delete_project"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Permanently delete a Litewrite project. "
+            "This removes the project, all its files, compiled artifacts, and version history. "
+            "This action is IRREVERSIBLE. Always confirm with the user before deleting."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "project_id": {
+                    "type": "string",
+                    "description": "The project ID to delete",
+                },
+            },
+            "required": ["project_id"],
+        }
+
+    async def execute(self, project_id: str, **kwargs: Any) -> str:
+        result = await self._client.request(
+            "/api/internal/projects/delete",
+            {"projectId": project_id},
+        )
+
+        if not result.get("success"):
+            return f"Error deleting project: {result.get('error', 'Unknown error')}"
+
+        name = result.get("data", {}).get("name", "")
+        return f"Project '{name}' ({project_id}) has been permanently deleted."
+
+
+class LitewriteRenameProjectTool(Tool):
+    """Tool to rename or update a Litewrite project's metadata."""
+
+    def __init__(self, client: LitewriteClient):
+        self._client = client
+
+    @property
+    def name(self) -> str:
+        return "litewrite_rename_project"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Rename a Litewrite project or update its description. "
+            "Provide at least one of 'name' or 'description'."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "project_id": {
+                    "type": "string",
+                    "description": "The project ID",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "New project name",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "New project description",
+                },
+            },
+            "required": ["project_id"],
+        }
+
+    async def execute(
+        self,
+        project_id: str,
+        name: str = "",
+        description: str | None = None,
+        **kwargs: Any,
+    ) -> str:
+        data: dict[str, Any] = {"projectId": project_id}
+
+        if name:
+            data["name"] = name
+        if description is not None:
+            data["description"] = description
+
+        if len(data) <= 1:
+            return "Error: Provide at least 'name' or 'description' to update."
+
+        result = await self._client.request("/api/internal/projects/rename", data)
+
+        if not result.get("success"):
+            return f"Error updating project: {result.get('error', 'Unknown error')}"
+
+        project = result.get("data", {}).get("project", {})
+        return (
+            f"Project updated successfully:\n"
+            f"- ID: {project.get('id')}\n"
+            f"- Name: {project.get('name')}\n"
+            f"- Description: {project.get('description', 'N/A')}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Version Management Tools
+# ---------------------------------------------------------------------------
+
+
+class LitewriteListVersionsTool(Tool):
+    """Tool to list all versions/history of a Litewrite project."""
+
+    def __init__(self, client: LitewriteClient):
+        self._client = client
+
+    @property
+    def name(self) -> str:
+        return "litewrite_list_versions"
+
+    @property
+    def description(self) -> str:
+        return (
+            "List all saved versions (history) of a Litewrite project. "
+            "Returns version IDs, names, creation dates, and file counts. "
+            "Use this to find a version ID for restoring."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "project_id": {
+                    "type": "string",
+                    "description": "The project ID",
+                },
+            },
+            "required": ["project_id"],
+        }
+
+    async def execute(self, project_id: str, **kwargs: Any) -> str:
+        result = await self._client.request(
+            "/api/internal/projects/versions/list",
+            {"projectId": project_id},
+        )
+
+        if not result.get("success"):
+            return f"Error listing versions: {result.get('error', 'Unknown error')}"
+
+        data = result.get("data", {})
+        project_name = data.get("projectName", "")
+        versions = data.get("versions", [])
+
+        if not versions:
+            return f"No saved versions found for project '{project_name}'."
+
+        lines = [f"Versions for project '{project_name}' ({len(versions)} total):"]
+        for v in versions:
+            user_name = v.get("user", {}).get("name", "Unknown") if v.get("user") else "Unknown"
+            lines.append(
+                f"- [{v['id']}] \"{v['name']}\" "
+                f"(by {user_name}, {v.get('fileCount', '?')} files, "
+                f"{v['createdAt']})"
+            )
+            if v.get("description"):
+                lines.append(f"  Description: {v['description']}")
+        return "\n".join(lines)
+
+
+class LitewriteSaveVersionTool(Tool):
+    """Tool to manually save the current project state as a version."""
+
+    def __init__(self, client: LitewriteClient, default_owner_id: str = ""):
+        self._client = client
+        self._default_owner_id = default_owner_id
+
+    @property
+    def name(self) -> str:
+        return "litewrite_save_version"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Save the current state of a Litewrite project as a named version. "
+            "This creates a snapshot that can be restored later. "
+            "Note: compilation already auto-saves a version by default, "
+            "so use this only when you want to save without compiling."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "project_id": {
+                    "type": "string",
+                    "description": "The project ID",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Version name (e.g. 'Before major rewrite'). Auto-generated if not provided.",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Optional version description",
+                },
+            },
+            "required": ["project_id"],
+        }
+
+    async def execute(
+        self,
+        project_id: str,
+        name: str = "",
+        description: str = "",
+        **kwargs: Any,
+    ) -> str:
+        data: dict[str, Any] = {"projectId": project_id}
+
+        if name:
+            data["name"] = name
+        if description:
+            data["description"] = description
+        if self._default_owner_id:
+            data["userId"] = self._default_owner_id
+
+        result = await self._client.request(
+            "/api/internal/projects/versions/create",
+            data,
+        )
+
+        if not result.get("success"):
+            if result.get("skipped"):
+                return "No changes detected since the last saved version. Nothing to save."
+            return f"Error saving version: {result.get('error', 'Unknown error')}"
+
+        version = result.get("data", {}).get("version", {})
+        return (
+            f"Version saved successfully:\n"
+            f"- ID: {version.get('id')}\n"
+            f"- Name: \"{version.get('name')}\"\n"
+            f"- Files: {version.get('fileCount', '?')}\n"
+            f"- Created: {version.get('createdAt')}"
+        )
+
+
+class LitewriteRestoreVersionTool(Tool):
+    """Tool to restore a Litewrite project to a specific version."""
+
+    def __init__(self, client: LitewriteClient):
+        self._client = client
+
+    @property
+    def name(self) -> str:
+        return "litewrite_restore_version"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Restore a Litewrite project to a specific saved version. "
+            "This replaces ALL current project files with the version's files. "
+            "The current state will be lost unless it was saved as a version. "
+            "Always confirm with the user and suggest saving a version first."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "project_id": {
+                    "type": "string",
+                    "description": "The project ID",
+                },
+                "version_id": {
+                    "type": "string",
+                    "description": "The version ID to restore to (get from litewrite_list_versions)",
+                },
+            },
+            "required": ["project_id", "version_id"],
+        }
+
+    async def execute(
+        self, project_id: str, version_id: str, **kwargs: Any
+    ) -> str:
+        result = await self._client.request(
+            "/api/internal/projects/versions/restore",
+            {"projectId": project_id, "versionId": version_id},
+        )
+
+        if not result.get("success"):
+            return f"Error restoring version: {result.get('error', 'Unknown error')}"
+
+        data = result.get("data", {})
+        return (
+            f"Project restored to version \"{data.get('versionName', '')}\" successfully.\n"
+            f"- Restored files: {data.get('restoredFileCount', 0)}\n"
+            f"- Yjs cache cleared: {data.get('clearedYjsKeys', 0)} keys"
+        )
+
+
+# ---------------------------------------------------------------------------
+# File Management Tools
+# ---------------------------------------------------------------------------
+
+
+class LitewriteCreateFileTool(Tool):
+    """Tool to create a new file or folder in a Litewrite project."""
+
+    def __init__(self, client: LitewriteClient):
+        self._client = client
+
+    @property
+    def name(self) -> str:
+        return "litewrite_create_file"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Create a new file or folder in a Litewrite project. "
+            "For files, you can optionally provide initial content. "
+            "For folders, a placeholder is created to make the folder visible."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "project_id": {
+                    "type": "string",
+                    "description": "The project ID",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "File or folder name (e.g. 'chapter1.tex', 'images')",
+                },
+                "type": {
+                    "type": "string",
+                    "enum": ["file", "folder"],
+                    "description": "Type to create: 'file' (default) or 'folder'",
+                },
+                "parent_path": {
+                    "type": "string",
+                    "description": "Parent directory path (e.g. 'sections'). Empty for project root.",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Initial file content (only for type='file')",
+                },
+            },
+            "required": ["project_id", "name"],
+        }
+
+    async def execute(
+        self,
+        project_id: str,
+        name: str,
+        type: str = "file",
+        parent_path: str = "",
+        content: str = "",
+        **kwargs: Any,
+    ) -> str:
+        data: dict[str, Any] = {
+            "projectId": project_id,
+            "name": name,
+            "type": type,
+        }
+
+        if parent_path:
+            data["parentPath"] = parent_path
+        if content and type == "file":
+            data["content"] = content
+
+        result = await self._client.request("/api/internal/files/create", data)
+
+        if not result.get("success"):
+            error = result.get("error", "Unknown error")
+            if error == "FILE_EXISTS":
+                return f"Error: A file named '{name}' already exists at the specified location."
+            if error == "FOLDER_EXISTS":
+                return f"Error: A folder named '{name}' already exists at the specified location."
+            return f"Error creating {type}: {error}"
+
+        path = result.get("data", {}).get("path", name)
+        return f"Successfully created {type} '{path}' in project."
+
+
+class LitewriteRenameFileTool(Tool):
+    """Tool to rename or move a file/folder in a Litewrite project."""
+
+    def __init__(self, client: LitewriteClient):
+        self._client = client
+
+    @property
+    def name(self) -> str:
+        return "litewrite_rename_file"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Rename or move a file/folder in a Litewrite project. "
+            "To rename: provide source_path and new_name. "
+            "To move: provide source_path and target_path (destination folder). "
+            "To move and rename: provide all three."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "project_id": {
+                    "type": "string",
+                    "description": "The project ID",
+                },
+                "source_path": {
+                    "type": "string",
+                    "description": "Current file path (e.g. 'main.tex', 'sections/intro.tex')",
+                },
+                "new_name": {
+                    "type": "string",
+                    "description": "New file name (e.g. 'introduction.tex')",
+                },
+                "target_path": {
+                    "type": "string",
+                    "description": "Destination folder path for moving (e.g. 'sections')",
+                },
+            },
+            "required": ["project_id", "source_path"],
+        }
+
+    async def execute(
+        self,
+        project_id: str,
+        source_path: str,
+        new_name: str = "",
+        target_path: str = "",
+        **kwargs: Any,
+    ) -> str:
+        data: dict[str, Any] = {
+            "projectId": project_id,
+            "sourcePath": source_path,
+        }
+
+        if new_name:
+            data["newName"] = new_name
+        if target_path:
+            data["targetPath"] = target_path
+
+        if not new_name and not target_path:
+            return "Error: Provide at least 'new_name' or 'target_path'."
+
+        result = await self._client.request("/api/internal/files/rename", data)
+
+        if not result.get("success"):
+            return f"Error renaming file: {result.get('error', 'Unknown error')}"
+
+        res_data = result.get("data", {})
+        return (
+            f"File renamed/moved successfully:\n"
+            f"- From: {res_data.get('oldPath', source_path)}\n"
+            f"- To: {res_data.get('newPath', '')}"
+        )
+
+
+class LitewriteDeleteFileTool(Tool):
+    """Tool to delete a file or folder in a Litewrite project."""
+
+    def __init__(self, client: LitewriteClient):
+        self._client = client
+
+    @property
+    def name(self) -> str:
+        return "litewrite_delete_file"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Delete a file or folder from a Litewrite project. "
+            "If the path points to a folder, all files within it are deleted recursively. "
+            "This action is IRREVERSIBLE. Always confirm with the user before deleting."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "project_id": {
+                    "type": "string",
+                    "description": "The project ID",
+                },
+                "file_path": {
+                    "type": "string",
+                    "description": "Path of the file or folder to delete (e.g. 'old_chapter.tex', 'drafts')",
+                },
+            },
+            "required": ["project_id", "file_path"],
+        }
+
+    async def execute(
+        self, project_id: str, file_path: str, **kwargs: Any
+    ) -> str:
+        result = await self._client.request(
+            "/api/internal/files/delete",
+            {"projectId": project_id, "filePath": file_path},
+        )
+
+        if not result.get("success"):
+            return f"Error deleting file: {result.get('error', 'Unknown error')}"
+
+        deleted_count = result.get("data", {}).get("deletedCount", 0)
+        return f"Successfully deleted '{file_path}' ({deleted_count} file(s) removed)."
+
+
+class LitewriteUploadFileTool(Tool):
+    """Tool to upload a local file (image, PDF, etc.) to a Litewrite project."""
+
+    def __init__(self, client: LitewriteClient):
+        self._client = client
+
+    @property
+    def name(self) -> str:
+        return "litewrite_upload_file"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Upload a local file to a Litewrite project. "
+            "Supports images (png, jpg, gif, etc.), PDFs, and any other file type. "
+            "The file is read from the local path and uploaded to the specified project path. "
+            "Use this to add images, figures, or other assets to a project. "
+            "If a file already exists at the target path, it will be overwritten by default."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "project_id": {
+                    "type": "string",
+                    "description": "The project ID",
+                },
+                "local_path": {
+                    "type": "string",
+                    "description": (
+                        "Local file path to upload (e.g. from an attached file). "
+                        "Use the path provided in the '[Attached files]' section of the user message."
+                    ),
+                },
+                "target_path": {
+                    "type": "string",
+                    "description": (
+                        "Destination path in the project (e.g. 'figures/diagram.png', 'images/photo.jpg'). "
+                        "Include the file name."
+                    ),
+                },
+                "overwrite": {
+                    "type": "boolean",
+                    "description": "Whether to overwrite if the file already exists. Default: true",
+                },
+            },
+            "required": ["project_id", "local_path", "target_path"],
+        }
+
+    async def execute(
+        self,
+        project_id: str,
+        local_path: str,
+        target_path: str,
+        overwrite: bool = True,
+        **kwargs: Any,
+    ) -> str:
+        # Validate local file exists
+        p = Path(local_path)
+        if not p.is_file():
+            return f"Error: Local file not found: {local_path}"
+
+        # Read file and encode as base64
+        try:
+            file_bytes = p.read_bytes()
+        except Exception as e:
+            return f"Error reading local file: {e}"
+
+        mime, _ = mimetypes.guess_type(local_path)
+        is_text = mime and mime.startswith("text/")
+
+        data: dict[str, Any] = {
+            "projectId": project_id,
+            "filePath": target_path,
+            "overwrite": overwrite,
+        }
+
+        if is_text:
+            # Text file: send as plain string
+            data["content"] = file_bytes.decode("utf-8", errors="replace")
+        else:
+            # Binary file: send as base64
+            data["contentBase64"] = base64.b64encode(file_bytes).decode()
+
+        logger.info(
+            f"Uploading {local_path} ({len(file_bytes)} bytes) "
+            f"-> project {project_id}/{target_path}"
+        )
+
+        result = await self._client.request("/api/internal/files/upload", data)
+
+        if not result.get("success"):
+            return f"Error uploading file: {result.get('error', 'Unknown error')}"
+
+        res_data = result.get("data", {})
+        return (
+            f"File uploaded successfully:\n"
+            f"- Project path: {res_data.get('path', target_path)}\n"
+            f"- Size: {res_data.get('size', len(file_bytes))} bytes\n"
+            f"- Type: {res_data.get('mimeType', mime or 'unknown')}"
         )

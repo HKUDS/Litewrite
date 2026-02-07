@@ -150,24 +150,44 @@ When remembering something, write to {workspace_path}/memory/MEMORY.md"""
     def _build_user_content(
         self, text: str, media: list[str] | None
     ) -> str | list[dict[str, Any]]:
-        """Build user message content with optional base64-encoded images."""
+        """Build user message content with optional base64-encoded images.
+
+        Images are encoded as vision content for multi-modal LLMs.
+        File paths are appended to the text so the LLM can reference them
+        when using tools (e.g., uploading files to a project).
+        """
         if not media:
             return text
 
         images = []
+        valid_paths: list[str] = []
         for path in media:
             p = Path(path)
-            mime, _ = mimetypes.guess_type(path)
-            if not p.is_file() or not mime or not mime.startswith("image/"):
+            if not p.is_file():
                 continue
-            b64 = base64.b64encode(p.read_bytes()).decode()
-            images.append(
-                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
-            )
+            mime, _ = mimetypes.guess_type(path)
+            if mime and mime.startswith("image/"):
+                b64 = base64.b64encode(p.read_bytes()).decode()
+                images.append(
+                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
+                )
+            valid_paths.append(path)
+
+        if not valid_paths:
+            return text
+
+        # Append file path info so the LLM can reference files in tool calls
+        attachment_info = "\n".join(
+            f"  - {p}" for p in valid_paths
+        )
+        augmented_text = (
+            f"{text}\n\n"
+            f"[Attached files (local paths for tool use):\n{attachment_info}]"
+        )
 
         if not images:
-            return text
-        return images + [{"type": "text", "text": text}]
+            return augmented_text
+        return images + [{"type": "text", "text": augmented_text}]
 
     def add_tool_result(
         self,

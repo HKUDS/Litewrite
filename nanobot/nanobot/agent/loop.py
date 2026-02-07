@@ -119,11 +119,26 @@ class AgentLoop:
         """Register Litewrite integration tools."""
         from nanobot.agent.tools.litewrite import (
             LitewriteClient,
+            # Core tools
             LitewriteListProjectsTool,
             LitewriteListFilesTool,
             LitewriteReadFileTool,
             LitewriteEditFileTool,
             LitewriteCompileTool,
+            LitewriteAgentTool,
+            # Project management tools
+            LitewriteCreateProjectTool,
+            LitewriteDeleteProjectTool,
+            LitewriteRenameProjectTool,
+            # Version management tools
+            LitewriteListVersionsTool,
+            LitewriteSaveVersionTool,
+            LitewriteRestoreVersionTool,
+            # File management tools
+            LitewriteCreateFileTool,
+            LitewriteRenameFileTool,
+            LitewriteDeleteFileTool,
+            LitewriteUploadFileTool,
         )
 
         client = LitewriteClient(
@@ -136,11 +151,29 @@ class AgentLoop:
         if self.feishu_config:
             default_owner_id = self.feishu_config.default_litewrite_user_id
 
+        # Core tools
         self.tools.register(LitewriteListProjectsTool(client, default_owner_id))
         self.tools.register(LitewriteListFilesTool(client))
         self.tools.register(LitewriteReadFileTool(client))
         self.tools.register(LitewriteEditFileTool(client))
-        self.tools.register(LitewriteCompileTool(client))
+        self.tools.register(LitewriteCompileTool(client, default_owner_id))
+        self.tools.register(LitewriteAgentTool(client, default_owner_id))
+
+        # Project management tools
+        self.tools.register(LitewriteCreateProjectTool(client, default_owner_id))
+        self.tools.register(LitewriteDeleteProjectTool(client))
+        self.tools.register(LitewriteRenameProjectTool(client))
+
+        # Version management tools
+        self.tools.register(LitewriteListVersionsTool(client))
+        self.tools.register(LitewriteSaveVersionTool(client, default_owner_id))
+        self.tools.register(LitewriteRestoreVersionTool(client))
+
+        # File management tools
+        self.tools.register(LitewriteCreateFileTool(client))
+        self.tools.register(LitewriteRenameFileTool(client))
+        self.tools.register(LitewriteDeleteFileTool(client))
+        self.tools.register(LitewriteUploadFileTool(client))
 
         logger.info(f"Litewrite tools registered (url={self.litewrite_config.url})")
 

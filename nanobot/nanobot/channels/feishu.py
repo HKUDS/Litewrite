@@ -20,11 +20,15 @@ try:
         CreateMessageRequestBody,
         CreateFileRequest,
         CreateFileRequestBody,
+        GetMessageResourceRequest,
     )
 
     FEISHU_AVAILABLE = True
 except ImportError:
     FEISHU_AVAILABLE = False
+
+# Local directory for downloaded media files
+_MEDIA_DIR = Path.home() / ".nanobot" / "media"
 
 
 class FeishuChannel(BaseChannel):
@@ -101,6 +105,124 @@ class FeishuChannel(BaseChannel):
 
         asyncio.run_coroutine_threadsafe(self._handle_feishu_message(data), self._loop)
 
+    @staticmethod
+    def _extract_post_text(content_json: dict[str, Any]) -> tuple[str, list[str]]:
+        """Extract plain text and image keys from a Feishu 'post' (rich text) message.
+
+        Feishu event payloads use the **flat** format for ``message.content``::
+
+            {"title": "...", "content": [[{"tag": "text", "text": "..."}], ...]}
+
+        The Send-API uses a **wrapped** format::
+
+            {"post": {"zh_cn": {"title": "...", "content": [...]}}}
+
+        This method handles both.
+
+        Returns:
+            (text, image_keys) — extracted plain text and list of Feishu image keys.
+        """
+        # Determine which format we have
+        if "content" in content_json and isinstance(content_json["content"], list):
+            # Flat format (from event payload): {"title": "...", "content": [...]}
+            lang_data = content_json
+        elif "post" in content_json:
+            # Wrapped format (from Send API): {"post": {"zh_cn": {...}}}
+            post_data = content_json["post"]
+            lang_data = None
+            for key in ("zh_cn", "en_us"):
+                if key in post_data:
+                    lang_data = post_data[key]
+                    break
+            if lang_data is None:
+                for v in post_data.values():
+                    if isinstance(v, dict):
+                        lang_data = v
+                        break
+            if not lang_data:
+                return "", []
+        else:
+            return "", []
+
+        title = lang_data.get("title", "")
+        paragraphs = lang_data.get("content", [])
+
+        text_parts: list[str] = []
+        image_keys: list[str] = []
+
+        if title:
+            text_parts.append(title)
+
+        for paragraph in paragraphs:
+            if not isinstance(paragraph, list):
+                continue
+            para_text: list[str] = []
+            for block in paragraph:
+                if not isinstance(block, dict):
+                    continue
+                tag = block.get("tag", "")
+                if tag == "text":
+                    para_text.append(block.get("text", ""))
+                elif tag == "a":
+                    para_text.append(block.get("text", ""))
+                elif tag == "at":
+                    user_name = block.get("user_name") or block.get("user_id", "")
+                    if user_name:
+                        para_text.append(f"@{user_name}")
+                elif tag == "img":
+                    image_key = block.get("image_key", "")
+                    if image_key:
+                        image_keys.append(image_key)
+                    para_text.append("[Image]")
+                elif tag == "media":
+                    para_text.append("[Media]")
+            if para_text:
+                text_parts.append("".join(para_text))
+
+        return "\n".join(text_parts), image_keys
+
+    async def _download_feishu_image(self, message_id: str, image_key: str) -> str | None:
+        """Download an image from Feishu using its image_key.
+
+        Returns the local file path on success, or None on failure.
+        """
+        if not self._lark_client:
+            logger.warning("Feishu client not initialized, cannot download image")
+            return None
+
+        try:
+            _MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+
+            request = (
+                GetMessageResourceRequest.builder()
+                .message_id(message_id)
+                .file_key(image_key)
+                .type("image")
+                .build()
+            )
+
+            response = await asyncio.to_thread(
+                self._lark_client.im.v1.message_resource.get, request
+            )
+
+            if not response.success():
+                logger.error(
+                    f"Failed to download Feishu image {image_key}: "
+                    f"code={response.code}, msg={response.msg}"
+                )
+                return None
+
+            # Save to local file
+            file_path = _MEDIA_DIR / f"feishu_{image_key[:20]}.png"
+            file_path.write_bytes(response.file.read())
+
+            logger.info(f"Downloaded Feishu image: {image_key[:20]}... -> {file_path}")
+            return str(file_path)
+
+        except Exception as e:
+            logger.error(f"Error downloading Feishu image {image_key}: {e}")
+            return None
+
     async def _handle_feishu_message(self, data: Any) -> None:
         """Process a Feishu message event and forward to the message bus."""
         try:
@@ -113,35 +235,66 @@ class FeishuChannel(BaseChannel):
             sender_id = sender.sender_id.open_id if sender.sender_id else ""
             chat_id = message.chat_id or ""
 
-            # Only handle text messages for now
             msg_type = message.message_type
-            if msg_type != "text":
-                logger.debug(f"Ignoring non-text message type: {msg_type}")
-                return
+            message_id = message.message_id or ""
 
-            # Parse message content (Feishu wraps text in JSON: {"text": "..."})
+            # Parse message content based on type
             content = ""
+            media_paths: list[str] = []
+            image_keys: list[str] = []
+            metadata: dict[str, Any] = {
+                "message_id": message_id,
+                "chat_type": message.chat_type,
+                "msg_type": msg_type,
+            }
+
             try:
                 content_json = json.loads(message.content)
-                content = content_json.get("text", "")
+
+                if msg_type == "text":
+                    # Text messages: {"text": "..."}
+                    content = content_json.get("text", "")
+
+                elif msg_type == "post":
+                    # Rich text (post) messages: extract text and image keys
+                    content, image_keys = self._extract_post_text(content_json)
+
+                elif msg_type == "image":
+                    # Standalone image messages: {"image_key": "..."}
+                    img_key = content_json.get("image_key", "")
+                    if img_key:
+                        image_keys.append(img_key)
+                    content = "[User sent an image]"
+
+                else:
+                    logger.debug(f"Ignoring unsupported message type: {msg_type}")
+                    return
+
             except (json.JSONDecodeError, TypeError):
                 content = message.content or ""
 
             if not content:
                 return
 
-            logger.debug(f"Feishu message from {sender_id}: {content[:50]}...")
+            # Download images from Feishu
+            if image_keys and message_id:
+                for img_key in image_keys:
+                    local_path = await self._download_feishu_image(message_id, img_key)
+                    if local_path:
+                        media_paths.append(local_path)
+
+            logger.info(
+                f"Feishu {msg_type} from {sender_id}: {content[:100]}..."
+                + (f" ({len(media_paths)} media files)" if media_paths else "")
+            )
 
             # Forward to the message bus
             await self._handle_message(
                 sender_id=sender_id,
                 chat_id=chat_id,
                 content=content,
-                metadata={
-                    "message_id": message.message_id,
-                    "chat_type": message.chat_type,
-                    "msg_type": msg_type,
-                },
+                media=media_paths if media_paths else None,
+                metadata=metadata,
             )
 
         except Exception as e:
