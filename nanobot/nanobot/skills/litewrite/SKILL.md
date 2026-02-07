@@ -46,7 +46,7 @@ When modifying a document to include Chinese text:
 
 ## Example
 
-User says: "把RAGAnything论文标题改成中文，编译后发给我"
+User says: "Change the RAGAnything paper title to Chinese, compile and send it to me"
 
 Steps:
 1. `litewrite_list_projects(search="RAGAnything")` -> find the project ID
@@ -54,4 +54,4 @@ Steps:
 3. Modify the `\title{...}` to Chinese, add xeCJK support packages
 4. `litewrite_edit_file(project_id, "main.tex", <FULL modified content>)` -> write back the ENTIRE file
 5. `litewrite_compile(project_id, compiler="xelatex")` -> compile with xelatex for CJK support
-6. `message(content="编译完成，PDF已发送", media=[pdf_path])` -> send to user
+6. `message(content="Compilation complete, PDF sent", media=[pdf_path])` -> send to user
