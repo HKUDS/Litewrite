@@ -203,9 +203,7 @@ class TelegramChannel(BaseChannel):
         except Exception as e:
             logger.warning(f"HTML parse failed, falling back to plain text: {e}")
             try:
-                await self._app.bot.send_message(
-                    chat_id=chat_id, text=fallback_content
-                )
+                await self._app.bot.send_message(chat_id=chat_id, text=fallback_content)
             except Exception as e2:
                 logger.error(f"Error sending Telegram message: {e2}")
 

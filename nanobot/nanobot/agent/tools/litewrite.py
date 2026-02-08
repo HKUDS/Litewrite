@@ -71,7 +71,11 @@ class LitewriteCreateProjectTool(Tool):
         }
 
     async def execute(
-        self, name: str, description: str = "", main_file_content: str = "", **kwargs: Any
+        self,
+        name: str,
+        description: str = "",
+        main_file_content: str = "",
+        **kwargs: Any,
     ) -> str:
         data: dict[str, Any] = {"name": name}
 

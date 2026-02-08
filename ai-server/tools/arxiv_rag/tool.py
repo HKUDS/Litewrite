@@ -232,7 +232,9 @@ Focus on technical terms, method names, and domain-specific vocabulary."""
                 self._log(f"Selected top {len(papers)} papers (reranked)")
             except Exception as e:
                 self._log(f"Embedding rerank failed ({e}), using raw order")
-                logger.warning(f"Embedding rerank failed, falling back to raw results: {e}")
+                logger.warning(
+                    f"Embedding rerank failed, falling back to raw results: {e}"
+                )
                 papers = papers[:max_papers]
 
             # 4) Process each paper (download, chunk, retrieve)

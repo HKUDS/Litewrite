@@ -194,7 +194,9 @@ class WebSearchTool:
                 self._log(f"Selected top {len(results)} results (reranked)")
             except Exception as e:
                 self._log(f"Embedding rerank failed ({e}), using raw order")
-                logger.warning(f"Embedding rerank failed, falling back to raw results: {e}")
+                logger.warning(
+                    f"Embedding rerank failed, falling back to raw results: {e}"
+                )
                 results = results[:max_results]
 
             # 3) Process each page (download, chunk, retrieve)

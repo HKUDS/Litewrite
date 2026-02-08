@@ -101,7 +101,10 @@ class LitewriteDeepResearchTool(Tool):
         try:
             async with httpx.AsyncClient(timeout=httpx.Timeout(300.0)) as client:
                 async with client.stream(
-                    "POST", url, json=payload, headers={"Content-Type": "application/json"}
+                    "POST",
+                    url,
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
                 ) as response:
                     if response.status_code != 200:
                         body = await response.aread()
@@ -135,7 +138,9 @@ class LitewriteDeepResearchTool(Tool):
         except httpx.TimeoutException:
             return "Error: Deep research timed out after 300 seconds."
         except httpx.ConnectError as e:
-            return f"Error: Could not connect to AI server at {self._ai_server_url}: {e}"
+            return (
+                f"Error: Could not connect to AI server at {self._ai_server_url}: {e}"
+            )
         except Exception as e:
             logger.error(f"Deep research error: {e}")
             return f"Error during deep research: {e}"
@@ -152,10 +157,14 @@ class LitewriteDeepResearchTool(Tool):
         parts = [report_content.strip()]
 
         if result_state["references_markdown"]:
-            parts.append(f"\n\n---\n\n## References\n\n{result_state['references_markdown']}")
+            parts.append(
+                f"\n\n---\n\n## References\n\n{result_state['references_markdown']}"
+            )
 
         if result_state["bibtex"]:
-            parts.append(f"\n\n---\n\n## BibTeX\n\n```bibtex\n{result_state['bibtex']}\n```")
+            parts.append(
+                f"\n\n---\n\n## BibTeX\n\n```bibtex\n{result_state['bibtex']}\n```"
+            )
 
         arxiv_count = result_state["arxiv_count"]
         web_count = result_state["web_count"]
