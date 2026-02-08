@@ -3,12 +3,13 @@
 from pathlib import Path
 from typing import Any
 
-from loguru import logger
 
 from nanobot.agent.tools.base import Tool
 
 
-def _resolve_and_check(raw_path: str, workspace: Path | None) -> tuple[Path | None, str]:
+def _resolve_and_check(
+    raw_path: str, workspace: Path | None
+) -> tuple[Path | None, str]:
     """
     Resolve a path and verify it is within the allowed workspace.
 

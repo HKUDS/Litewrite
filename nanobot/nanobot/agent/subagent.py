@@ -49,7 +49,9 @@ class SubagentManager:
         self.brave_api_key = brave_api_key
         self.exec_config = exec_config or ExecToolConfig()
         self._running_tasks: dict[str, asyncio.Task[None]] = {}
-        self._max_concurrent = 5  # Limit concurrent subagents to prevent resource exhaustion
+        self._max_concurrent = (
+            5  # Limit concurrent subagents to prevent resource exhaustion
+        )
 
     async def spawn(
         self,

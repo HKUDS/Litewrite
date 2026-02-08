@@ -45,13 +45,22 @@ def _is_private_host(hostname: str) -> bool:
         return True
 
     # Block Docker internal service names commonly used in this project
-    INTERNAL_HOSTS = {"web", "ai-server", "redis", "minio", "compile-server", "ws-server"}
+    INTERNAL_HOSTS = {
+        "web",
+        "ai-server",
+        "redis",
+        "minio",
+        "compile-server",
+        "ws-server",
+    }
     if hostname.lower().split(".")[0] in INTERNAL_HOSTS:
         return True
 
     try:
         # Resolve hostname to IP and check if it's private
-        for info in socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM):
+        for info in socket.getaddrinfo(
+            hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM
+        ):
             addr = info[4][0]
             ip = ipaddress.ip_address(addr)
             if (
