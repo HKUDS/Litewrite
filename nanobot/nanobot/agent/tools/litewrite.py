@@ -27,6 +27,79 @@ class LitewriteClient:
             return resp.json()
 
 
+class LitewriteCreateProjectTool(Tool):
+    """Tool to create a new Litewrite project."""
+
+    def __init__(self, client: LitewriteClient, default_owner_id: str = ""):
+        self._client = client
+        self._default_owner_id = default_owner_id
+
+    @property
+    def name(self) -> str:
+        return "litewrite_create_project"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Create a new LaTeX project in Litewrite. "
+            "Returns the project ID which can be used with other litewrite_* tools. "
+            "Optionally provide the initial main.tex content."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The project name",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Optional project description",
+                },
+                "main_file_content": {
+                    "type": "string",
+                    "description": (
+                        "Optional: the complete LaTeX content for main.tex. "
+                        "If omitted, a default template will be used."
+                    ),
+                },
+            },
+            "required": ["name"],
+        }
+
+    async def execute(
+        self, name: str, description: str = "", main_file_content: str = "", **kwargs: Any
+    ) -> str:
+        data: dict[str, Any] = {"name": name}
+
+        if not self._default_owner_id:
+            return "Error: No default owner ID configured. Cannot create project."
+
+        data["ownerId"] = self._default_owner_id
+
+        if description:
+            data["description"] = description
+        if main_file_content:
+            data["mainFileContent"] = main_file_content
+
+        result = await self._client.request("/api/internal/projects/create", data)
+
+        if not result.get("success"):
+            return f"Error creating project: {result.get('error', 'Unknown error')}"
+
+        project = result.get("data", {})
+        return (
+            f"Project created successfully!\n"
+            f"- ID: {project.get('id')}\n"
+            f"- Name: {project.get('name')}\n"
+            f"- Main file: {project.get('mainFile', 'main.tex')}\n\n"
+            f"You can now use litewrite_edit_file to update the content and litewrite_compile to build the PDF."
+        )
+
+
 class LitewriteListProjectsTool(Tool):
     """Tool to list/search Litewrite projects."""
 

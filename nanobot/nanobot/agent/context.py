@@ -73,7 +73,9 @@ Skills with available="false" need dependencies installed first - you can try in
         """Get the core identity section."""
         from datetime import datetime
 
-        now = datetime.now().strftime("%Y-%m-%d %H:%M (%A)")
+        dt = datetime.now()
+        now = dt.strftime("%Y-%m-%d %H:%M (%A)")
+        year = dt.strftime("%Y")
         workspace_path = str(self.workspace.expanduser().resolve())
 
         return f"""# nanobot 🐈
@@ -85,8 +87,9 @@ You are nanobot, a helpful AI assistant. You have access to tools that allow you
 - Send messages to users on chat channels
 - Spawn subagents for complex background tasks
 
-## Current Time
-{now}
+## Current Date & Time
+**Today is {now}. The current year is {year}.**
+When searching for latest research or information, include the current year ({year}) in your queries.
 
 ## Workspace
 Your workspace is at: {workspace_path}

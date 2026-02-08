@@ -163,24 +163,87 @@ class TelegramChannel(BaseChannel):
             return
 
         try:
-            # chat_id should be the Telegram chat ID (integer)
             chat_id = int(msg.chat_id)
-            # Convert markdown to Telegram HTML
-            html_content = _markdown_to_telegram_html(msg.content)
+        except ValueError:
+            logger.error(f"Invalid chat_id: {msg.chat_id}")
+            return
+
+        # Send text content (with Telegram 4096 char limit handling)
+        if msg.content:
+            await self._send_text(chat_id, msg.content)
+
+        # Send file attachments
+        if msg.media:
+            for file_path in msg.media:
+                await self._send_file(chat_id, file_path)
+
+    async def _send_text(self, chat_id: int, content: str) -> None:
+        """Send text message, splitting if it exceeds Telegram's 4096 char limit."""
+        html_content = _markdown_to_telegram_html(content)
+
+        # Telegram message limit is 4096 characters
+        MAX_LEN = 4096
+        if len(html_content) <= MAX_LEN:
+            await self._send_text_chunk(chat_id, html_content, content)
+            return
+
+        # Split long messages — try to split on newlines
+        chunks = self._split_text(html_content, MAX_LEN)
+        for chunk in chunks:
+            await self._send_text_chunk(chat_id, chunk, chunk)
+
+    async def _send_text_chunk(
+        self, chat_id: int, html_content: str, fallback_content: str
+    ) -> None:
+        """Send a single text chunk, falling back to plain text if HTML fails."""
+        try:
             await self._app.bot.send_message(
                 chat_id=chat_id, text=html_content, parse_mode="HTML"
             )
-        except ValueError:
-            logger.error(f"Invalid chat_id: {msg.chat_id}")
         except Exception as e:
-            # Fallback to plain text if HTML parsing fails
             logger.warning(f"HTML parse failed, falling back to plain text: {e}")
             try:
                 await self._app.bot.send_message(
-                    chat_id=int(msg.chat_id), text=msg.content
+                    chat_id=chat_id, text=fallback_content
                 )
             except Exception as e2:
                 logger.error(f"Error sending Telegram message: {e2}")
+
+    async def _send_file(self, chat_id: int, file_path: str) -> None:
+        """Send a file as a Telegram document."""
+        from pathlib import Path
+
+        path = Path(file_path)
+        if not path.exists():
+            logger.error(f"File not found: {file_path}")
+            return
+
+        try:
+            with open(path, "rb") as f:
+                await self._app.bot.send_document(
+                    chat_id=chat_id,
+                    document=f,
+                    filename=path.name,
+                )
+            logger.info(f"Sent file to Telegram: {path.name}")
+        except Exception as e:
+            logger.error(f"Error sending file to Telegram: {e}")
+
+    @staticmethod
+    def _split_text(text: str, max_len: int) -> list[str]:
+        """Split text into chunks of max_len, preferring newline boundaries."""
+        chunks: list[str] = []
+        while len(text) > max_len:
+            # Try to split at the last newline before max_len
+            split_at = text.rfind("\n", 0, max_len)
+            if split_at == -1 or split_at < max_len // 2:
+                # No good newline found, split at max_len
+                split_at = max_len
+            chunks.append(text[:split_at])
+            text = text[split_at:].lstrip("\n")
+        if text:
+            chunks.append(text)
+        return chunks
 
     async def _on_start(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
