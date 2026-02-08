@@ -1,6 +1,7 @@
 """Feishu/Lark channel implementation using lark-oapi SDK."""
 
 import asyncio
+import io
 import json
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ from nanobot.bus.events import OutboundMessage
 from nanobot.bus.queue import MessageBus
 from nanobot.channels.base import BaseChannel
 from nanobot.config.schema import FeishuConfig
+from nanobot.media.manager import MediaManager
 
 try:
     import lark_oapi as lark
@@ -21,14 +23,14 @@ try:
         CreateFileRequest,
         CreateFileRequestBody,
         GetMessageResourceRequest,
+        CreateMessageReactionRequest,
+        CreateMessageReactionRequestBody,
+        Emoji,
     )
 
     FEISHU_AVAILABLE = True
 except ImportError:
     FEISHU_AVAILABLE = False
-
-# Local directory for downloaded media files
-_MEDIA_DIR = Path.home() / ".nanobot" / "media"
 
 
 class FeishuChannel(BaseChannel):
@@ -47,6 +49,7 @@ class FeishuChannel(BaseChannel):
         self._ws_client: Any = None
         self._lark_client: Any = None
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._media = MediaManager()
 
     async def start(self) -> None:
         """Start the Feishu bot with WebSocket long-connection."""
@@ -191,8 +194,6 @@ class FeishuChannel(BaseChannel):
             return None
 
         try:
-            _MEDIA_DIR.mkdir(parents=True, exist_ok=True)
-
             request = (
                 GetMessageResourceRequest.builder()
                 .message_id(message_id)
@@ -212,16 +213,106 @@ class FeishuChannel(BaseChannel):
                 )
                 return None
 
-            # Save to local file
-            file_path = _MEDIA_DIR / f"feishu_{image_key[:20]}.png"
-            file_path.write_bytes(response.file.read())
+            # Save via MediaManager
+            raw_bytes = response.file.read()
+            file_path = self._media.save(
+                data=raw_bytes,
+                channel="feishu",
+                original_name=f"{image_key[:20]}.png",
+                extension=".png",
+            )
 
             logger.info(f"Downloaded Feishu image: {image_key[:20]}... -> {file_path}")
-            return str(file_path)
+            return file_path
 
         except Exception as e:
             logger.error(f"Error downloading Feishu image {image_key}: {e}")
             return None
+
+    async def _download_feishu_file(self, message_id: str, file_key: str, file_name: str = "") -> str | None:
+        """Download a file from Feishu using its file_key.
+
+        Returns the local file path on success, or None on failure.
+        """
+        if not self._lark_client:
+            logger.warning("Feishu client not initialized, cannot download file")
+            return None
+
+        try:
+            request = (
+                GetMessageResourceRequest.builder()
+                .message_id(message_id)
+                .file_key(file_key)
+                .type("file")
+                .build()
+            )
+
+            response = await asyncio.to_thread(
+                self._lark_client.im.v1.message_resource.get, request
+            )
+
+            if not response.success():
+                logger.error(
+                    f"Failed to download Feishu file {file_key}: "
+                    f"code={response.code}, msg={response.msg}"
+                )
+                return None
+
+            # Save via MediaManager
+            raw_bytes = response.file.read()
+            original_name = file_name or f"{file_key[:20]}.bin"
+            extension = Path(original_name).suffix if original_name else ".bin"
+
+            file_path = self._media.save(
+                data=raw_bytes,
+                channel="feishu",
+                original_name=original_name,
+                extension=extension or ".bin",
+            )
+
+            logger.info(f"Downloaded Feishu file: {original_name} -> {file_path}")
+            return file_path
+
+        except Exception as e:
+            logger.error(f"Error downloading Feishu file {file_key}: {e}")
+            return None
+
+    async def _add_reaction(self, message_id: str, emoji_type: str = "DONE") -> None:
+        """Add an emoji reaction (thumbs-up / done) to a Feishu message.
+
+        This is fire-and-forget; failures are logged but never raised.
+        """
+        if not self._lark_client or not message_id:
+            return
+
+        try:
+            body = (
+                CreateMessageReactionRequestBody.builder()
+                .reaction_type(Emoji.builder().emoji_type(emoji_type).build())
+                .build()
+            )
+
+            request = (
+                CreateMessageReactionRequest.builder()
+                .message_id(message_id)
+                .request_body(body)
+                .build()
+            )
+
+            response = await asyncio.to_thread(
+                self._lark_client.im.v1.message_reaction.create, request
+            )
+
+            if not response.success():
+                logger.debug(
+                    f"Failed to add reaction to {message_id}: "
+                    f"code={response.code}, msg={response.msg}"
+                )
+            else:
+                logger.debug(f"Added reaction '{emoji_type}' to message {message_id}")
+
+        except Exception as e:
+            logger.debug(f"Error adding reaction: {e}")
 
     async def _handle_feishu_message(self, data: Any) -> None:
         """Process a Feishu message event and forward to the message bus."""
@@ -266,6 +357,18 @@ class FeishuChannel(BaseChannel):
                         image_keys.append(img_key)
                     content = "[User sent an image]"
 
+                elif msg_type == "file":
+                    # File messages: {"file_key": "...", "file_name": "...", "size": "..."}
+                    file_key = content_json.get("file_key", "")
+                    file_name = content_json.get("file_name", "file")
+                    if file_key and message_id:
+                        local_path = await self._download_feishu_file(
+                            message_id, file_key, file_name
+                        )
+                        if local_path:
+                            media_paths.append(local_path)
+                    content = f"[User sent a file: {file_name}]"
+
                 else:
                     logger.debug(f"Ignoring unsupported message type: {msg_type}")
                     return
@@ -287,6 +390,10 @@ class FeishuChannel(BaseChannel):
                 f"Feishu {msg_type} from {sender_id}: {content[:100]}..."
                 + (f" ({len(media_paths)} media files)" if media_paths else "")
             )
+
+            # Acknowledge receipt with an emoji reaction (fire-and-forget)
+            if message_id:
+                asyncio.create_task(self._add_reaction(message_id, "DONE"))
 
             # Forward to the message bus
             await self._handle_message(
@@ -371,11 +478,17 @@ class FeishuChannel(BaseChannel):
 
         try:
             # Step 1: Upload file to Feishu
+            # Read file bytes into memory first, then wrap in BytesIO.
+            # This avoids leaking file handles (the old `open(path, "rb")`
+            # was never closed, causing FD exhaustion on repeated compiles).
+            file_bytes = path.read_bytes()
+            file_stream = io.BytesIO(file_bytes)
+
             upload_body = (
                 CreateFileRequestBody.builder()
                 .file_type(file_type)
                 .file_name(path.name)
-                .file(open(path, "rb"))
+                .file(file_stream)
                 .build()
             )
 

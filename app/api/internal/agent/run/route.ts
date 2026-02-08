@@ -8,10 +8,22 @@
  * The agent runs in direct-apply mode: file edits are written directly
  * to storage instead of creating shadow documents.
  *
+ * Session support: when sessionId is provided, the agent uses the session's
+ * conversation history for context. When not provided, a new session named
+ * "nanobot" is created. The session is saved after each interaction so it
+ * appears in the web UI's Conversation History.
+ *
  * This is NOT exposed to the public - protected by INTERNAL_API_SECRET.
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import {
+  createSession,
+  getSessionById,
+  addUserMessage,
+  addAssistantMessage,
+} from "@/lib/ask-session";
+import type { SessionMessageItem } from "@/types/ask";
 
 const AI_SERVER_URL = process.env.AI_SERVER_URL || "http://localhost:6612";
 
@@ -37,6 +49,7 @@ interface AgentRunRequest {
   message: string;
   mode?: "ask" | "agent";
   referencedFiles?: string[];
+  sessionId?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -50,7 +63,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = (await request.json()) as AgentRunRequest;
-    const { projectId, userId, message, mode, referencedFiles } = body;
+    const { projectId, userId, message, mode, referencedFiles, sessionId } =
+      body;
 
     if (!projectId || !message) {
       return NextResponse.json({
@@ -59,18 +73,94 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const effectiveUserId = userId || "";
+
     console.log(
-      `[Internal/AgentRun] Invoking agent: project=${projectId}, mode=${mode || "agent"}, message_len=${message.length}`
+      `[Internal/AgentRun] Invoking agent: project=${projectId}, mode=${mode || "agent"}, message_len=${message.length}, sessionId=${sessionId || "(new)"}`
     );
 
+    // ---------------------------------------------------------------
+    // Session management: load or create session
+    // ---------------------------------------------------------------
+    let currentSessionId = sessionId || "";
+    let conversationHistory: Array<{ role: string; content: string }> | null =
+      null;
+
+    if (effectiveUserId) {
+      if (currentSessionId) {
+        // Load existing session
+        const session = await getSessionById(
+          projectId,
+          effectiveUserId,
+          currentSessionId
+        );
+        if (session) {
+          // Build conversation history from session messages
+          conversationHistory = session.messages
+            .map((msg) => {
+              const textContent = msg.items
+                ?.filter(
+                  (item: SessionMessageItem) => item.type === "text"
+                )
+                .map(
+                  (item: SessionMessageItem) =>
+                    item.type === "text" ? item.content : ""
+                )
+                .join("");
+              return {
+                role: msg.role,
+                content: textContent || msg.content || "",
+              };
+            })
+            .filter((m) => m.content);
+
+          console.log(
+            `[Internal/AgentRun] Loaded session ${currentSessionId}: ${conversationHistory.length} history messages`
+          );
+        } else {
+          console.warn(
+            `[Internal/AgentRun] Session ${currentSessionId} not found, creating new`
+          );
+          currentSessionId = "";
+        }
+      }
+
+      if (!currentSessionId) {
+        // Create a new session named "nanobot"
+        const newSession = await createSession(
+          projectId,
+          effectiveUserId,
+          "nanobot"
+        );
+        currentSessionId = newSession.id;
+        console.log(
+          `[Internal/AgentRun] Created new session: ${currentSessionId}`
+        );
+      }
+
+      // Save the user message to the session
+      await addUserMessage(
+        projectId,
+        effectiveUserId,
+        currentSessionId,
+        message
+      );
+    }
+
+    // ---------------------------------------------------------------
     // Build request for ai-server's sync endpoint
-    const aiServerPayload = {
+    // ---------------------------------------------------------------
+    const aiServerPayload: Record<string, unknown> = {
       projectId,
-      userId: userId || "",
+      userId: effectiveUserId,
       message,
       mode: mode || "agent",
       referencedFiles: referencedFiles || [],
     };
+
+    if (conversationHistory && conversationHistory.length > 0) {
+      aiServerPayload.conversationHistory = conversationHistory;
+    }
 
     // Call ai-server's synchronous endpoint
     const controller = new AbortController();
@@ -94,6 +184,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           success: false,
           error: `AI server returned ${response.status}`,
+          sessionId: currentSessionId || undefined,
         });
       }
 
@@ -103,7 +194,28 @@ export async function POST(request: NextRequest) {
         `[Internal/AgentRun] Agent completed: success=${result.success}, response_len=${result.response?.length || 0}`
       );
 
-      return NextResponse.json(result);
+      // ---------------------------------------------------------------
+      // Save assistant response to session
+      // ---------------------------------------------------------------
+      if (effectiveUserId && currentSessionId && result.response) {
+        const assistantItems: SessionMessageItem[] = [
+          { type: "text", content: result.response },
+        ];
+        await addAssistantMessage(
+          projectId,
+          effectiveUserId,
+          currentSessionId,
+          assistantItems
+        );
+        console.log(
+          `[Internal/AgentRun] Saved assistant message to session ${currentSessionId}`
+        );
+      }
+
+      return NextResponse.json({
+        ...result,
+        sessionId: currentSessionId || undefined,
+      });
     } catch (fetchError) {
       clearTimeout(timeoutId);
 
@@ -114,6 +226,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           success: false,
           error: `Agent execution timed out after ${AGENT_TIMEOUT_MS / 1000} seconds`,
+          sessionId: currentSessionId || undefined,
         });
       }
 

@@ -24,6 +24,12 @@ from nanobot.agent.tools.shell import ExecTool
 from nanobot.agent.tools.web import WebSearchTool, WebFetchTool
 from nanobot.agent.tools.message import MessageTool
 from nanobot.agent.tools.spawn import SpawnTool
+from nanobot.agent.tools.session import (
+    SessionInfoTool,
+    SessionGetHistoryTool,
+    SessionClearTool,
+    SessionSummarizeTool,
+)
 from nanobot.agent.subagent import SubagentManager
 from nanobot.session.manager import SessionManager
 
@@ -111,34 +117,49 @@ class AgentLoop:
         spawn_tool = SpawnTool(manager=self.subagents)
         self.tools.register(spawn_tool)
 
+        # Session management tools
+        self.tools.register(SessionInfoTool(self.sessions))
+        self.tools.register(SessionGetHistoryTool(self.sessions))
+        self.tools.register(SessionClearTool(self.sessions))
+        summarize_tool = SessionSummarizeTool(
+            self.sessions, provider=self.provider, model=self.model
+        )
+        self.tools.register(summarize_tool)
+
         # Litewrite tools (registered when Litewrite integration is configured)
         if self.litewrite_config and self.litewrite_config.api_secret:
             self._register_litewrite_tools()
 
     def _register_litewrite_tools(self) -> None:
-        """Register Litewrite integration tools."""
+        """Register Litewrite integration tools.
+
+        Only *management-level* tools are exposed to the bot.  All file
+        reading / editing / listing is delegated to the ``litewrite_agent``
+        tool which internally invokes Litewrite's AI sub-agents.  This keeps
+        the bot in a **Manager** role and prevents it from bypassing the
+        agent's orchestration layer.
+        """
         from nanobot.agent.tools.litewrite import (
             LitewriteClient,
-            # Core tools
+            # Manager-level tools
             LitewriteListProjectsTool,
-            LitewriteListFilesTool,
-            LitewriteReadFileTool,
-            LitewriteEditFileTool,
             LitewriteCompileTool,
             LitewriteAgentTool,
-            # Project management tools
+            # Project management
             LitewriteCreateProjectTool,
             LitewriteDeleteProjectTool,
             LitewriteRenameProjectTool,
-            # Version management tools
+            # Version management
             LitewriteListVersionsTool,
             LitewriteSaveVersionTool,
             LitewriteRestoreVersionTool,
-            # File management tools
-            LitewriteCreateFileTool,
-            LitewriteRenameFileTool,
-            LitewriteDeleteFileTool,
+            # File management
             LitewriteUploadFileTool,
+            LitewriteCreateFileTool,
+            # Import tools
+            LitewriteImportArxivTool,
+            LitewriteImportGithubTool,
+            LitewriteImportUploadTool,
         )
 
         client = LitewriteClient(
@@ -151,29 +172,30 @@ class AgentLoop:
         if self.feishu_config:
             default_owner_id = self.feishu_config.default_litewrite_user_id
 
-        # Core tools
+        # Core tools — litewrite_agent is the primary interface for
+        # reading, analysing, writing, and editing project files.
         self.tools.register(LitewriteListProjectsTool(client, default_owner_id))
-        self.tools.register(LitewriteListFilesTool(client))
-        self.tools.register(LitewriteReadFileTool(client))
-        self.tools.register(LitewriteEditFileTool(client))
-        self.tools.register(LitewriteCompileTool(client, default_owner_id))
         self.tools.register(LitewriteAgentTool(client, default_owner_id))
+        self.tools.register(LitewriteCompileTool(client, default_owner_id))
 
-        # Project management tools
+        # Project management
         self.tools.register(LitewriteCreateProjectTool(client, default_owner_id))
         self.tools.register(LitewriteDeleteProjectTool(client))
         self.tools.register(LitewriteRenameProjectTool(client))
 
-        # Version management tools
+        # Version management
         self.tools.register(LitewriteListVersionsTool(client))
         self.tools.register(LitewriteSaveVersionTool(client, default_owner_id))
         self.tools.register(LitewriteRestoreVersionTool(client))
 
-        # File management tools
-        self.tools.register(LitewriteCreateFileTool(client))
-        self.tools.register(LitewriteRenameFileTool(client))
-        self.tools.register(LitewriteDeleteFileTool(client))
+        # File management
         self.tools.register(LitewriteUploadFileTool(client))
+        self.tools.register(LitewriteCreateFileTool(client))
+
+        # Import tools (arXiv, GitHub/GitLab, file upload)
+        self.tools.register(LitewriteImportArxivTool(client, default_owner_id))
+        self.tools.register(LitewriteImportGithubTool(client, default_owner_id))
+        self.tools.register(LitewriteImportUploadTool(client, default_owner_id))
 
         logger.info(f"Litewrite tools registered (url={self.litewrite_config.url})")
 
@@ -230,6 +252,20 @@ class AgentLoop:
         # Get or create session
         session = self.sessions.get_or_create(msg.session_key)
 
+        # ── Slash commands (handled before LLM) ──────────────────────────
+        if msg.content.strip() == "/clear":
+            count = len(session.messages)
+            session.clear()
+            self.sessions.save(session)
+            logger.info(
+                f"Session {msg.session_key} cleared via /clear ({count} messages)"
+            )
+            return OutboundMessage(
+                channel=msg.channel,
+                chat_id=msg.chat_id,
+                content=f"✅ Chat history cleared ({count} messages removed). Starting fresh!",
+            )
+
         # Update tool contexts
         message_tool = self.tools.get("message")
         if isinstance(message_tool, MessageTool):
@@ -238,6 +274,23 @@ class AgentLoop:
         spawn_tool = self.tools.get("spawn")
         if isinstance(spawn_tool, SpawnTool):
             spawn_tool.set_context(msg.channel, msg.chat_id)
+
+        # Set compile tool context so it can auto-send PDFs
+        compile_tool = self.tools.get("litewrite_compile")
+        if compile_tool is not None:
+            from nanobot.agent.tools.litewrite import LitewriteCompileTool
+
+            if isinstance(compile_tool, LitewriteCompileTool):
+                compile_tool.set_context(
+                    msg.channel, msg.chat_id, self.bus.publish_outbound
+                )
+
+        # Set session context on session tools
+        from nanobot.agent.tools.session import _SessionToolBase
+
+        for tool in self.tools._tools.values():
+            if isinstance(tool, _SessionToolBase):
+                tool.set_session(session)
 
         # Build initial messages (use get_history for LLM-formatted messages)
         messages = self.context.build_messages(
@@ -249,17 +302,26 @@ class AgentLoop:
         # Agent loop
         iteration = 0
         final_content = None
+        any_tool_called = False
 
         while iteration < self.max_iterations:
             iteration += 1
 
             # Call LLM
+            logger.info(
+                f"Agent iteration {iteration}/{self.max_iterations} "
+                f"(tools_available={len(self.tools)}, history_msgs={len(messages)})"
+            )
             response = await self.provider.chat(
                 messages=messages, tools=self.tools.get_definitions(), model=self.model
             )
 
             # Handle tool calls
             if response.has_tool_calls:
+                tool_names = [tc.name for tc in response.tool_calls]
+                logger.info(f"LLM requested tool calls: {tool_names}")
+                any_tool_called = True
+
                 # Add assistant message with tool calls
                 tool_call_dicts = [
                     {
@@ -281,18 +343,58 @@ class AgentLoop:
                 # Execute tools
                 for tool_call in response.tool_calls:
                     args_str = json.dumps(tool_call.arguments)
-                    logger.debug(
-                        f"Executing tool: {tool_call.name} with arguments: {args_str}"
+                    logger.info(
+                        f"Executing tool: {tool_call.name}({args_str})"
                     )
                     result = await self.tools.execute(
                         tool_call.name, tool_call.arguments
+                    )
+                    result_preview = result[:200] if len(result) > 200 else result
+                    logger.info(
+                        f"Tool {tool_call.name} result: {result_preview}"
                     )
                     messages = self.context.add_tool_result(
                         messages, tool_call.id, tool_call.name, result
                     )
             else:
-                # No tool calls, we're done
-                final_content = response.content
+                # No tool calls — check for suspected hallucination
+                final_content = response.content or ""
+                logger.info(
+                    f"LLM returned text (no tool calls) at iteration {iteration}: "
+                    f"{final_content[:120]}..."
+                )
+
+                # Hallucination guard: if the model claims it performed an
+                # action (compile, send PDF, edit file, etc.) on the FIRST
+                # iteration without ever calling a tool, inject a correction
+                # prompt and retry.
+                if not any_tool_called and iteration == 1:
+                    if self._looks_like_hallucinated_action(final_content):
+                        logger.warning(
+                            "Hallucination detected: model claims action without "
+                            "tool calls. Injecting correction prompt."
+                        )
+                        messages = self.context.add_assistant_message(
+                            messages, final_content
+                        )
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    "[System] You did NOT actually perform any action — "
+                                    "you MUST call the appropriate tool function to "
+                                    "complete the user's request. You cannot claim "
+                                    "an action was done without calling a tool. "
+                                    "Available tools include: litewrite_agent, "
+                                    "litewrite_compile, litewrite_create_file, "
+                                    "litewrite_list_projects, litewrite_import_arxiv, "
+                                    "etc. Please call the correct tool(s) NOW."
+                                ),
+                            }
+                        )
+                        final_content = None
+                        continue
+
                 break
 
         if final_content is None:
@@ -340,6 +442,13 @@ class AgentLoop:
         spawn_tool = self.tools.get("spawn")
         if isinstance(spawn_tool, SpawnTool):
             spawn_tool.set_context(origin_channel, origin_chat_id)
+
+        # Set session context on session tools
+        from nanobot.agent.tools.session import _SessionToolBase
+
+        for tool in self.tools._tools.values():
+            if isinstance(tool, _SessionToolBase):
+                tool.set_session(session)
 
         # Build messages with the announce content
         messages = self.context.build_messages(
@@ -399,6 +508,56 @@ class AgentLoop:
         return OutboundMessage(
             channel=origin_channel, chat_id=origin_chat_id, content=final_content
         )
+
+    @staticmethod
+    def _looks_like_hallucinated_action(text: str) -> bool:
+        """Detect if the model's text response looks like it performed an
+        action that should have required a tool call.
+
+        Returns ``True`` when suspicious patterns are found.
+        """
+        if not text:
+            return False
+        t = text.lower()
+        # Patterns that strongly suggest the model is claiming it did something
+        # that requires a tool call.
+        action_phrases = [
+            # Compilation
+            "编译成功",
+            "编译完成",
+            "pdf已发送",
+            "pdf 已发送",
+            "pdf已编译",
+            "compilation successful",
+            "pdf sent",
+            # Project operations
+            "已创建项目",
+            "项目已创建",
+            "project created",
+            # File operations
+            "已修改",
+            "修改完成",
+            "文件已编辑",
+            "file edited",
+            "已创建",
+            "已保存",
+            "已完成",
+            "已新建",
+            "已添加",
+            "已写入",
+            "已生成",
+            "已导入",
+            "已上传",
+            "file created",
+            "successfully created",
+            "saved to",
+            # Agent operations
+            "已总结",
+            "已分析",
+            "已重写",
+            "已更新",
+        ]
+        return any(phrase in t for phrase in action_phrases)
 
     async def process_direct(
         self, content: str, session_key: str = "cli:direct"

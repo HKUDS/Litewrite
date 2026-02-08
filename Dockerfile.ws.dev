@@ -14,7 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY package.json package-lock.json ./
 
 # Install dependencies (including dev dependencies)
-RUN npm ci --legacy-peer-deps
+# Use taobao mirror to avoid network issues in China
+RUN npm config set registry https://registry.npmmirror.com && \
+    npm ci --legacy-peer-deps
 
 # Copy tsconfig (required by tsx)
 COPY tsconfig.json ./

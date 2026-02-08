@@ -252,6 +252,29 @@ export async function POST(request: NextRequest) {
       `[Internal/Compile] Compilation successful, PDF size: ${pdfBuffer.length} bytes`
     );
 
+    // Clear project-level Yjs caches so the web editor shows fresh content
+    try {
+      const wsServerUrl =
+        process.env.WS_SERVER_URL ||
+        process.env.NEXT_PUBLIC_WS_URL?.replace(/^wss?:\/\//, (m) =>
+          m === "wss://" ? "https://" : "http://"
+        ) ||
+        "http://localhost:1234";
+
+      const base = wsServerUrl.replace(/\/+$/, "");
+      await fetch(`${base}/admin/clear-project/${projectId}`, {
+        method: "POST",
+        headers: process.env.INTERNAL_API_SECRET
+          ? { "x-internal-secret": process.env.INTERNAL_API_SECRET }
+          : undefined,
+      });
+      console.log(
+        `[Internal/Compile] Cleared project Yjs caches for ${projectId}`
+      );
+    } catch (e) {
+      console.warn("[Internal/Compile] Failed to clear project Yjs caches:", e);
+    }
+
     // Auto-save version after successful compilation
     let versionSaved: { id: string; name: string } | null = null;
     if (autoSave) {

@@ -201,6 +201,13 @@ docker compose build nanobot && docker compose up -d nanobot
 # Check Feishu connection
 docker logs litewrite-nanobot 2>&1 | grep "connected to wss"
 
+# clear nanobot chat history (method 1: send /clear in any chat)
+# Just type /clear in Feishu, WhatsApp, Telegram, etc. — instant!
+
+# clear nanobot chat history (method 2: docker CLI, clears ALL sessions)
+docker exec litewrite-nanobot sh -c 'rm -rf /root/.nanobot/sessions/*.jsonl'
+docker restart litewrite-nanobot
+
 # Test Litewrite Internal API manually
 curl -s -X POST http://localhost:3000/api/internal/projects/list \
   -H "Content-Type: application/json" \

@@ -3,12 +3,20 @@
 import base64
 import mimetypes
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Awaitable
 
 import httpx
 from loguru import logger
 
 from nanobot.agent.tools.base import Tool
+from nanobot.bus.events import OutboundMessage
+
+
+# ---------------------------------------------------------------------------
+# Litewrite Agent session ID cache (shared across tool instances)
+# Maps project_id -> session_id for reusing the same session per project
+# ---------------------------------------------------------------------------
+_agent_session_cache: dict[str, str] = {}
 
 
 class LitewriteClient:
@@ -26,6 +34,35 @@ class LitewriteClient:
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(url, json=data, headers=headers)
             return resp.json()
+
+    async def validate_project(
+        self, project_id: str, owner_id: str = ""
+    ) -> tuple[bool, str]:
+        """Check whether *project_id* exists.
+
+        Returns ``(True, "")`` on success, or ``(False, error_message)``
+        with a helpful listing of available projects when the ID is invalid.
+        """
+        try:
+            data: dict[str, Any] = {}
+            if owner_id:
+                data["ownerId"] = owner_id
+            result = await self.request("/api/internal/projects/list", data)
+            projects = result.get("data", {}).get("projects", [])
+            ids = {p["id"] for p in projects}
+            if project_id in ids:
+                return True, ""
+            available = ", ".join(
+                f"{p['name']} [{p['id']}]" for p in projects
+            )
+            return False, (
+                f"Project '{project_id}' not found. "
+                f"Available projects: {available or '(none)'}"
+            )
+        except Exception as e:
+            # If validation itself fails, let the call proceed
+            logger.warning(f"Project validation failed: {e}")
+            return True, ""
 
 
 class LitewriteListProjectsTool(Tool):
@@ -230,7 +267,13 @@ class LitewriteEditFileTool(Tool):
 
 
 class LitewriteAgentTool(Tool):
-    """Tool to invoke litewrite's built-in AI agent for writing/editing tasks."""
+    """Tool to invoke litewrite's built-in AI agent for writing/editing tasks.
+
+    Maintains a per-project session cache so that consecutive calls to the
+    same project reuse the same conversation session.  This allows the
+    litewrite agent to see prior conversation context and ensures the
+    session appears in the web UI's Conversation History as "nanobot".
+    """
 
     def __init__(self, client: LitewriteClient, default_owner_id: str = ""):
         self._client = client
@@ -296,9 +339,20 @@ class LitewriteAgentTool(Tool):
         referenced_files: list[str] | None = None,
         **kwargs: Any,
     ) -> str:
+        # Validate project ID before calling the agent (catches hallucinated IDs)
+        valid, err = await self._client.validate_project(
+            project_id, self._default_owner_id
+        )
+        if not valid:
+            logger.warning(f"litewrite_agent: {err}")
+            return f"Error: {err}"
+
+        # Look up cached session ID for this project
+        cached_session_id = _agent_session_cache.get(project_id)
+
         logger.info(
             f"Invoking Litewrite agent: project={project_id}, mode={mode}, "
-            f"message_len={len(message)}"
+            f"message_len={len(message)}, session={cached_session_id or '(new)'}"
         )
 
         data: dict[str, Any] = {
@@ -312,6 +366,10 @@ class LitewriteAgentTool(Tool):
 
         if referenced_files:
             data["referencedFiles"] = referenced_files
+
+        # Pass session ID if we have one cached
+        if cached_session_id:
+            data["sessionId"] = cached_session_id
 
         try:
             # Use longer timeout for agent execution (5 minutes)
@@ -330,6 +388,15 @@ class LitewriteAgentTool(Tool):
         except Exception as e:
             logger.error(f"Litewrite agent error: {e}")
             return f"Error invoking Litewrite agent: {str(e)}"
+
+        # Cache the session ID returned by the server (created or reused)
+        returned_session_id = result.get("sessionId")
+        if returned_session_id:
+            _agent_session_cache[project_id] = returned_session_id
+            if not cached_session_id:
+                logger.info(
+                    f"Cached new session for project {project_id}: {returned_session_id}"
+                )
 
         if not result.get("success"):
             error = result.get("error", "Unknown error")
@@ -350,6 +417,21 @@ class LitewriteCompileTool(Tool):
     def __init__(self, client: LitewriteClient, default_owner_id: str = ""):
         self._client = client
         self._default_owner_id = default_owner_id
+        self._send_callback: Callable[[OutboundMessage], Awaitable[None]] | None = None
+        self._channel: str = ""
+        self._chat_id: str = ""
+
+    def set_context(
+        self,
+        channel: str,
+        chat_id: str,
+        send_callback: Callable[[OutboundMessage], Awaitable[None]] | None = None,
+    ) -> None:
+        """Set the current message context for auto-sending PDFs."""
+        self._channel = channel
+        self._chat_id = chat_id
+        if send_callback is not None:
+            self._send_callback = send_callback
 
     @property
     def name(self) -> str:
@@ -362,8 +444,7 @@ class LitewriteCompileTool(Tool):
             "Supported compilers: pdflatex (default), xelatex, lualatex. "
             "Use xelatex when the document contains Chinese/Japanese/Korean text or uses fontspec/xeCJK packages. "
             "By default, the project is automatically saved as a version after successful compilation. "
-            "Returns the local file path of the compiled PDF. "
-            "Use the message tool with the media parameter to send the PDF to the user."
+            "The compiled PDF is automatically sent to the user — you do NOT need to call the message tool afterwards."
         )
 
     @property
@@ -397,6 +478,14 @@ class LitewriteCompileTool(Tool):
     async def execute(
         self, project_id: str, compiler: str = "pdflatex", auto_save: bool = True, **kwargs: Any
     ) -> str:
+        # Validate project ID before compiling
+        valid, err = await self._client.validate_project(
+            project_id, self._default_owner_id
+        )
+        if not valid:
+            logger.warning(f"litewrite_compile: {err}")
+            return f"Error: {err}"
+
         logger.info(f"Compiling Litewrite project: {project_id} (compiler={compiler}, auto_save={auto_save})")
 
         data: dict[str, Any] = {"projectId": project_id, "autoSave": auto_save}
@@ -435,11 +524,32 @@ class LitewriteCompileTool(Tool):
 
         logger.info(f"PDF saved to {pdf_path} ({len(pdf_bytes)} bytes)")
 
+        # Auto-send the PDF to the user
+        pdf_sent = False
+        if self._send_callback and self._channel and self._chat_id:
+            try:
+                await self._send_callback(
+                    OutboundMessage(
+                        channel=self._channel,
+                        chat_id=self._chat_id,
+                        content="",
+                        media=[str(pdf_path)],
+                    )
+                )
+                pdf_sent = True
+                logger.info(f"PDF auto-sent to {self._channel}:{self._chat_id}")
+            except Exception as e:
+                logger.error(f"Failed to auto-send PDF: {e}")
+
         # Build response with version info
-        lines = [
-            f"Compilation successful. PDF saved to: {pdf_path}",
-            f'Use the message tool with media=["{pdf_path}"] to send it to the user.',
-        ]
+        lines = ["Compilation successful."]
+        if pdf_sent:
+            lines.append("The compiled PDF has been sent to the user.")
+        else:
+            lines.append(f"PDF saved to: {pdf_path}")
+            lines.append(
+                f'Use the message tool with media=["{pdf_path}"] to send it to the user.'
+            )
 
         version_saved = result.get("data", {}).get("versionSaved")
         if version_saved:
@@ -1155,4 +1265,286 @@ class LitewriteUploadFileTool(Tool):
             f"- Project path: {res_data.get('path', target_path)}\n"
             f"- Size: {res_data.get('size', len(file_bytes))} bytes\n"
             f"- Type: {res_data.get('mimeType', mime or 'unknown')}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Import Tools
+# ---------------------------------------------------------------------------
+
+
+class LitewriteImportArxivTool(Tool):
+    """Tool to import a project from arXiv."""
+
+    def __init__(self, client: LitewriteClient, default_owner_id: str = ""):
+        self._client = client
+        self._default_owner_id = default_owner_id
+
+    @property
+    def name(self) -> str:
+        return "litewrite_import_arxiv"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Import a LaTeX project from arXiv. Provide an arXiv ID or URL. "
+            "The paper's source files will be downloaded and created as a new project. "
+            "Supported formats: arXiv ID (e.g. '2301.07041'), "
+            "arXiv URL (e.g. 'https://arxiv.org/abs/2301.07041'), "
+            "or PDF URL (e.g. 'https://arxiv.org/pdf/2301.07041.pdf')."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "arxiv_id": {
+                    "type": "string",
+                    "description": (
+                        "arXiv paper ID or URL. Examples: '2301.07041', "
+                        "'https://arxiv.org/abs/2301.07041'"
+                    ),
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Optional project name. Defaults to the paper title or arXiv ID.",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Optional project description.",
+                },
+            },
+            "required": ["arxiv_id"],
+        }
+
+    async def execute(
+        self,
+        arxiv_id: str,
+        name: str = "",
+        description: str = "",
+        **kwargs: Any,
+    ) -> str:
+        if not self._default_owner_id:
+            return "Error: Owner ID is not configured. Cannot import project."
+
+        data: dict[str, Any] = {
+            "arxivId": arxiv_id,
+            "ownerId": self._default_owner_id,
+        }
+        if name:
+            data["name"] = name
+        if description:
+            data["description"] = description
+
+        logger.info(f"Importing arXiv paper: {arxiv_id}")
+
+        try:
+            result = await self._client.request(
+                "/api/internal/projects/import/arxiv", data
+            )
+        except Exception as e:
+            logger.error(f"arXiv import error: {e}")
+            return f"Error importing from arXiv: {e}"
+
+        if not result.get("success"):
+            return f"Error importing from arXiv: {result.get('error', 'Unknown error')}"
+
+        project_data = result.get("data", {})
+        project = project_data.get("project", {})
+        return (
+            f"arXiv paper imported successfully:\n"
+            f"- Project ID: {project.get('id')}\n"
+            f"- Name: {project.get('name')}\n"
+            f"- arXiv ID: {project_data.get('arxivId', arxiv_id)}\n"
+            f"- Paper title: {project_data.get('paperTitle', 'N/A')}\n"
+            f"- Files: {project_data.get('filesCount', '?')}\n"
+            f"- Main file: {project.get('mainFile', 'main.tex')}"
+        )
+
+
+class LitewriteImportGithubTool(Tool):
+    """Tool to import a project from GitHub/GitLab."""
+
+    def __init__(self, client: LitewriteClient, default_owner_id: str = ""):
+        self._client = client
+        self._default_owner_id = default_owner_id
+
+    @property
+    def name(self) -> str:
+        return "litewrite_import_github"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Import a LaTeX project from a GitHub or GitLab repository. "
+            "Provide the repository URL. Supports importing entire repos "
+            "or specific subdirectories via tree URLs. "
+            "Examples: 'https://github.com/user/repo', "
+            "'https://github.com/user/repo/tree/main/latex-source'."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "GitHub or GitLab repository URL.",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Optional project name. Defaults to the repo name.",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Optional project description.",
+                },
+            },
+            "required": ["url"],
+        }
+
+    async def execute(
+        self,
+        url: str,
+        name: str = "",
+        description: str = "",
+        **kwargs: Any,
+    ) -> str:
+        if not self._default_owner_id:
+            return "Error: Owner ID is not configured. Cannot import project."
+
+        data: dict[str, Any] = {
+            "url": url,
+            "ownerId": self._default_owner_id,
+        }
+        if name:
+            data["name"] = name
+        if description:
+            data["description"] = description
+
+        logger.info(f"Importing from GitHub/GitLab: {url}")
+
+        try:
+            result = await self._client.request(
+                "/api/internal/projects/import/github", data
+            )
+        except Exception as e:
+            logger.error(f"GitHub import error: {e}")
+            return f"Error importing from GitHub/GitLab: {e}"
+
+        if not result.get("success"):
+            return f"Error importing from GitHub/GitLab: {result.get('error', 'Unknown error')}"
+
+        project_data = result.get("data", {})
+        project = project_data.get("project", {})
+        return (
+            f"Repository imported successfully:\n"
+            f"- Project ID: {project.get('id')}\n"
+            f"- Name: {project.get('name')}\n"
+            f"- Files: {project_data.get('filesCount', '?')}\n"
+            f"- Main file: {project.get('mainFile', 'main.tex')}"
+        )
+
+
+class LitewriteImportUploadTool(Tool):
+    """Tool to create a project by uploading a local file (zip/tex/etc.)."""
+
+    def __init__(self, client: LitewriteClient, default_owner_id: str = ""):
+        self._client = client
+        self._default_owner_id = default_owner_id
+
+    @property
+    def name(self) -> str:
+        return "litewrite_import_upload"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Create a new Litewrite project by uploading a local file. "
+            "Supports ZIP archives, tar.gz archives, and individual LaTeX files "
+            "(.tex, .bib, .cls, .sty). The file is read from a local path "
+            "(e.g. from an attached file the user sent). "
+            "A new project will be created with the uploaded content."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "local_path": {
+                    "type": "string",
+                    "description": (
+                        "Local file path to upload. Use the path from the "
+                        "'[Attached files]' section of the user message."
+                    ),
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Optional project name. Defaults to the file name.",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Optional project description.",
+                },
+            },
+            "required": ["local_path"],
+        }
+
+    async def execute(
+        self,
+        local_path: str,
+        name: str = "",
+        description: str = "",
+        **kwargs: Any,
+    ) -> str:
+        if not self._default_owner_id:
+            return "Error: Owner ID is not configured. Cannot import project."
+
+        p = Path(local_path)
+        if not p.is_file():
+            return f"Error: Local file not found: {local_path}"
+
+        try:
+            file_bytes = p.read_bytes()
+        except Exception as e:
+            return f"Error reading local file: {e}"
+
+        file_b64 = base64.b64encode(file_bytes).decode()
+
+        data: dict[str, Any] = {
+            "fileBase64": file_b64,
+            "fileName": p.name,
+            "ownerId": self._default_owner_id,
+        }
+        if name:
+            data["name"] = name
+        if description:
+            data["description"] = description
+
+        logger.info(
+            f"Uploading {local_path} ({len(file_bytes)} bytes) to create project"
+        )
+
+        try:
+            result = await self._client.request(
+                "/api/internal/projects/import/upload", data
+            )
+        except Exception as e:
+            logger.error(f"Upload import error: {e}")
+            return f"Error uploading file to create project: {e}"
+
+        if not result.get("success"):
+            return f"Error creating project from upload: {result.get('error', 'Unknown error')}"
+
+        project_data = result.get("data", {})
+        project = project_data.get("project", {})
+        return (
+            f"Project created from uploaded file:\n"
+            f"- Project ID: {project.get('id')}\n"
+            f"- Name: {project.get('name')}\n"
+            f"- Files: {project_data.get('filesCount', '?')}\n"
+            f"- Main file: {project.get('mainFile', 'main.tex')}"
         )

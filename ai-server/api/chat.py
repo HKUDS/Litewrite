@@ -154,6 +154,7 @@ class SyncChatRequest(BaseModel):
     userId: Optional[str] = None
     mode: str = "agent"
     referencedFiles: Optional[List[str]] = []
+    conversationHistory: Optional[List[Dict[str, Any]]] = None
 
 
 # ============================================================================
@@ -324,6 +325,7 @@ async def run_chat_sync(request: SyncChatRequest):
             user_id=request.userId or "",
             query=query,
             mode=request.mode,
+            conversation_history=request.conversationHistory,
             direct_apply=True,  # Always direct-apply for sync endpoint
         )
 
