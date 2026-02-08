@@ -246,7 +246,7 @@ services:
       - litewrite-network
 
   # ============================================================================
-  # nanobot AI assistant (Feishu bot + Litewrite integration)
+  # nanobot AI assistant (Telegram/Feishu bot + Litewrite integration)
   # ============================================================================
   nanobot:
     build:
@@ -261,6 +261,9 @@ services:
       # Litewrite integration
       - NANOBOT__LITEWRITE__URL=http://web:3000
       - NANOBOT__LITEWRITE__API_SECRET=${INTERNAL_API_SECRET:-dev-internal-secret}
+      # Telegram channel
+      - NANOBOT__CHANNELS__TELEGRAM__ENABLED=${TELEGRAM_ENABLED:-false}
+      - NANOBOT__CHANNELS__TELEGRAM__TOKEN=${TELEGRAM_BOT_TOKEN:-}
       # Feishu channel
       - NANOBOT__CHANNELS__FEISHU__ENABLED=${FEISHU_ENABLED:-false}
       - NANOBOT__CHANNELS__FEISHU__APP_ID=${FEISHU_APP_ID:-}

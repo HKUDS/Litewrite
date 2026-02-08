@@ -70,7 +70,7 @@ class ChannelManager:
                 logger.warning(f"Feishu channel not available: {e}")
 
     async def start_all(self) -> None:
-        """Start WhatsApp channel and the outbound dispatcher."""
+        """Start all enabled channels and the outbound dispatcher."""
         if not self.channels:
             logger.warning("No channels enabled")
             return
@@ -78,14 +78,18 @@ class ChannelManager:
         # Start outbound dispatcher
         self._dispatch_task = asyncio.create_task(self._dispatch_outbound())
 
-        # Start WhatsApp channel
+        # Start all enabled channels
         tasks = []
         for name, channel in self.channels.items():
             logger.info(f"Starting {name} channel...")
             tasks.append(asyncio.create_task(channel.start()))
 
         # Wait for all to complete (they should run forever)
-        await asyncio.gather(*tasks, return_exceptions=True)
+        # Check results for startup exceptions to avoid silent failures
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for name, result in zip(self.channels.keys(), results):
+            if isinstance(result, Exception):
+                logger.error(f"Channel '{name}' failed to start: {result}")
 
     async def stop_all(self) -> None:
         """Stop all channels and the dispatcher."""
