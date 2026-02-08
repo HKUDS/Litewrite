@@ -82,17 +82,25 @@ export async function POST(request: NextRequest) {
     };
 
     if (!projectId || !filePath) {
-      return NextResponse.json({
-        success: false,
-        error: "projectId and filePath are required",
-      });
+      return NextResponse.json(
+        { success: false, error: "projectId and filePath are required" },
+        { status: 400 }
+      );
     }
 
     if (typeof content !== "string") {
-      return NextResponse.json({
-        success: false,
-        error: "content must be a string",
-      });
+      return NextResponse.json(
+        { success: false, error: "content must be a string" },
+        { status: 400 }
+      );
+    }
+
+    // Validate filePath to prevent path traversal
+    if (filePath.includes("..") || filePath.startsWith("/")) {
+      return NextResponse.json(
+        { success: false, error: "Invalid file path" },
+        { status: 400 }
+      );
     }
 
     const storage = await getStorage();

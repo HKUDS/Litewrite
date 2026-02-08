@@ -84,11 +84,11 @@ class AgentLoop:
 
     def _register_default_tools(self) -> None:
         """Register the default set of tools."""
-        # File tools
-        self.tools.register(ReadFileTool())
-        self.tools.register(WriteFileTool())
-        self.tools.register(EditFileTool())
-        self.tools.register(ListDirTool())
+        # File tools (workspace-sandboxed)
+        self.tools.register(ReadFileTool(workspace=self.workspace))
+        self.tools.register(WriteFileTool(workspace=self.workspace))
+        self.tools.register(EditFileTool(workspace=self.workspace))
+        self.tools.register(ListDirTool(workspace=self.workspace))
 
         # Shell tool
         self.tools.register(
@@ -173,13 +173,13 @@ class AgentLoop:
                     if response:
                         await self.bus.publish_outbound(response)
                 except Exception as e:
-                    logger.error(f"Error processing message: {e}")
-                    # Send error response
+                    logger.error(f"Error processing message: {e}", exc_info=True)
+                    # Send generic error response (do not leak internal details)
                     await self.bus.publish_outbound(
                         OutboundMessage(
                             channel=msg.channel,
                             chat_id=msg.chat_id,
-                            content=f"Sorry, I encountered an error: {str(e)}",
+                            content="Sorry, I encountered an error processing your message. Please try again.",
                         )
                     )
             except asyncio.TimeoutError:

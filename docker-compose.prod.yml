@@ -293,7 +293,7 @@ services:
     container_name: litewrite-nanobot
     restart: unless-stopped
     volumes:
-      - nanobot-data:/root/.nanobot
+      - nanobot-data:/home/nanobot/.nanobot
     environment:
       # Litewrite integration
       - NANOBOT__LITEWRITE__URL=http://web:3000

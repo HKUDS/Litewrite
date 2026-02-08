@@ -30,14 +30,62 @@ def _normalize(text: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
+def _is_private_host(hostname: str) -> bool:
+    """Check if hostname resolves to a private/internal IP address."""
+    import ipaddress
+    import socket
+
+    # Block known cloud metadata hostnames
+    BLOCKED_HOSTS = {
+        "metadata.google.internal",
+        "metadata",
+        "169.254.169.254",
+    }
+    if hostname.lower() in BLOCKED_HOSTS:
+        return True
+
+    # Block Docker internal service names commonly used in this project
+    INTERNAL_HOSTS = {"web", "ai-server", "redis", "minio", "compile-server", "ws-server"}
+    if hostname.lower().split(".")[0] in INTERNAL_HOSTS:
+        return True
+
+    try:
+        # Resolve hostname to IP and check if it's private
+        for info in socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM):
+            addr = info[4][0]
+            ip = ipaddress.ip_address(addr)
+            if (
+                ip.is_private
+                or ip.is_loopback
+                or ip.is_link_local
+                or ip.is_reserved
+                or ip.is_multicast
+            ):
+                return True
+    except (socket.gaierror, ValueError):
+        # If we can't resolve, allow (may be valid external host)
+        pass
+    return False
+
+
 def _validate_url(url: str) -> tuple[bool, str]:
-    """Validate URL: must be http(s) with valid domain."""
+    """Validate URL: must be http(s) with valid domain, not targeting private networks."""
     try:
         p = urlparse(url)
         if p.scheme not in ("http", "https"):
             return False, f"Only http/https allowed, got '{p.scheme or 'none'}'"
         if not p.netloc:
             return False, "Missing domain"
+
+        # Extract hostname (strip port)
+        hostname = p.hostname or ""
+        if not hostname:
+            return False, "Missing hostname"
+
+        # Block private/internal addresses (SSRF protection)
+        if _is_private_host(hostname):
+            return False, f"Blocked: private or internal address ({hostname})"
+
         return True, ""
     except Exception as e:
         return False, str(e)
@@ -144,6 +192,19 @@ class WebFetchTool(Tool):
             ) as client:
                 r = await client.get(url, headers={"User-Agent": USER_AGENT})
                 r.raise_for_status()
+
+            # Validate the final URL after redirects (prevent SSRF via open redirect)
+            final_url = str(r.url)
+            if final_url != url:
+                is_final_valid, final_error = _validate_url(final_url)
+                if not is_final_valid:
+                    return json.dumps(
+                        {
+                            "error": f"Redirect target blocked: {final_error}",
+                            "url": url,
+                            "finalUrl": final_url,
+                        }
+                    )
 
             ctype = r.headers.get("content-type", "")
 

@@ -64,17 +64,17 @@ export async function POST(request: NextRequest) {
     };
 
     if (!name || typeof name !== "string" || name.trim().length === 0) {
-      return NextResponse.json({
-        success: false,
-        error: "name is required",
-      });
+      return NextResponse.json(
+        { success: false, error: "name is required" },
+        { status: 400 }
+      );
     }
 
     if (!ownerId || typeof ownerId !== "string") {
-      return NextResponse.json({
-        success: false,
-        error: "ownerId is required",
-      });
+      return NextResponse.json(
+        { success: false, error: "ownerId is required" },
+        { status: 400 }
+      );
     }
 
     const projectId = uuidv4();

@@ -218,21 +218,22 @@ class FeishuChannel(BaseChannel):
 
         try:
             # Step 1: Upload file to Feishu
-            upload_body = (
-                CreateFileRequestBody.builder()
-                .file_type(file_type)
-                .file_name(path.name)
-                .file(open(path, "rb"))
-                .build()
-            )
+            with open(path, "rb") as file_handle:
+                upload_body = (
+                    CreateFileRequestBody.builder()
+                    .file_type(file_type)
+                    .file_name(path.name)
+                    .file(file_handle)
+                    .build()
+                )
 
-            upload_request = (
-                CreateFileRequest.builder().request_body(upload_body).build()
-            )
+                upload_request = (
+                    CreateFileRequest.builder().request_body(upload_body).build()
+                )
 
-            upload_response = await asyncio.to_thread(
-                self._lark_client.im.v1.file.create, upload_request
-            )
+                upload_response = await asyncio.to_thread(
+                    self._lark_client.im.v1.file.create, upload_request
+                )
 
             if not upload_response.success():
                 logger.error(

@@ -99,7 +99,7 @@ class ExecToolConfig(BaseModel):
 
     timeout: int = 60
     restrict_to_workspace: bool = (
-        False  # If true, block commands accessing paths outside workspace
+        True  # Block commands accessing paths outside workspace
     )
 
 

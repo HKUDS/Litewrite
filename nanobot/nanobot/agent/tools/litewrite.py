@@ -77,12 +77,18 @@ class LitewriteCreateProjectTool(Tool):
         main_file_content: str = "",
         **kwargs: Any,
     ) -> str:
-        data: dict[str, Any] = {"name": name}
-
+        # Security: require default_owner_id to prevent unauthorized project creation
         if not self._default_owner_id:
-            return "Error: No default owner ID configured. Cannot create project."
+            return (
+                "Error: No default owner ID configured. "
+                "Cannot create project without user scope. "
+                "Please configure NANOBOT_DEFAULT_LITEWRITE_USER_ID."
+            )
 
-        data["ownerId"] = self._default_owner_id
+        data: dict[str, Any] = {
+            "name": name,
+            "ownerId": self._default_owner_id,
+        }
 
         if description:
             data["description"] = description
@@ -135,11 +141,17 @@ class LitewriteListProjectsTool(Tool):
         }
 
     async def execute(self, search: str = "", **kwargs: Any) -> str:
-        data: dict[str, Any] = {}
+        # Security: require default_owner_id to prevent cross-tenant enumeration
+        if not self._default_owner_id:
+            return (
+                "Error: No default owner ID configured. "
+                "Cannot list projects without user scope. "
+                "Please configure NANOBOT_DEFAULT_LITEWRITE_USER_ID."
+            )
+
+        data: dict[str, Any] = {"ownerId": self._default_owner_id}
         if search:
             data["search"] = search
-        if self._default_owner_id:
-            data["ownerId"] = self._default_owner_id
 
         result = await self._client.request("/api/internal/projects/list", data)
 
