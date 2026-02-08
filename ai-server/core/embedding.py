@@ -104,6 +104,12 @@ class EmbeddingEngine:
                 encoding_format="float",
             )
 
+        if response.data is None:
+            raise RuntimeError(
+                f"Embedding API returned empty response (model={self.model}). "
+                "Check that EMBEDDING_API_BASE supports the configured EMBEDDING_MODEL."
+            )
+
         return [np.array(item.embedding) for item in response.data]
 
     async def embed(self, text: str) -> np.ndarray:

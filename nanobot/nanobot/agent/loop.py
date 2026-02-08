@@ -100,7 +100,10 @@ class AgentLoop:
         )
 
         # Web tools
-        self.tools.register(WebSearchTool(api_key=self.brave_api_key))
+        # Note: WebSearchTool (Brave) removed — litewrite_deep_research covers
+        # search via ai-server (arXiv + web). Only keep WebFetchTool for URL fetching.
+        if self.brave_api_key:
+            self.tools.register(WebSearchTool(api_key=self.brave_api_key))
         self.tools.register(WebFetchTool())
 
         # Message tool
@@ -119,12 +122,14 @@ class AgentLoop:
         """Register Litewrite integration tools."""
         from nanobot.agent.tools.litewrite import (
             LitewriteClient,
+            LitewriteCreateProjectTool,
             LitewriteListProjectsTool,
             LitewriteListFilesTool,
             LitewriteReadFileTool,
             LitewriteEditFileTool,
             LitewriteCompileTool,
         )
+        from nanobot.agent.tools.deep_research import LitewriteDeepResearchTool
 
         client = LitewriteClient(
             base_url=self.litewrite_config.url,
@@ -136,11 +141,19 @@ class AgentLoop:
         if self.feishu_config:
             default_owner_id = self.feishu_config.default_litewrite_user_id
 
+        self.tools.register(LitewriteCreateProjectTool(client, default_owner_id))
         self.tools.register(LitewriteListProjectsTool(client, default_owner_id))
         self.tools.register(LitewriteListFilesTool(client))
         self.tools.register(LitewriteReadFileTool(client))
         self.tools.register(LitewriteEditFileTool(client))
         self.tools.register(LitewriteCompileTool(client))
+
+        # Deep Research tool (calls AI server directly)
+        self.tools.register(
+            LitewriteDeepResearchTool(
+                ai_server_url=self.litewrite_config.ai_server_url,
+            )
+        )
 
         logger.info(f"Litewrite tools registered (url={self.litewrite_config.url})")
 
