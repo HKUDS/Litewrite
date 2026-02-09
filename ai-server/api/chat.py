@@ -240,6 +240,7 @@ async def run_chat(request: ChatRequest):
             session_id=request.sessionId or request.conversationId,
             mode=request.mode,  # "ask" or "agent"
             user_id=request.actorId,
+            direct_apply=request.directApply,
         ):
             yield output.to_sse()
 

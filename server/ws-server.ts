@@ -478,7 +478,14 @@ const server = http.createServer(async (req, res) => {
     // Also await in-flight initialization so we don't 404 while a doc is loading.
     let docData = docs.get(roomName);
     if (!docData && initializingDocs.has(roomName)) {
-      docData = await initializingDocs.get(roomName)!;
+      try {
+        docData = await initializingDocs.get(roomName)!;
+      } catch (err) {
+        console.error(`❌ GET /doc: init failed for ${roomName}:`, err);
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Document initialization failed" }));
+        return;
+      }
     }
 
     if (!docData) {

@@ -89,6 +89,7 @@ class ChatService:
         attached_contents: Optional[Dict[str, str]] = None,
         session_id: Optional[str] = None,
         agent_config: Optional[AgentConfig] = None,
+        direct_apply: bool = False,
     ) -> AsyncGenerator[SSEOutput, None]:
         """
         Run the chat service.
@@ -105,12 +106,14 @@ class ChatService:
             attached_contents: Content of attached files
             session_id: Session identifier for history compression updates
             agent_config: Optional agent configuration
+            direct_apply: If True, file edits bypass shadow documents and write
+                         directly to storage. Used by nanobot/API consumers.
 
         Yields:
             SSEOutput events for streaming
         """
         logger.info(
-            f"[ChatService 1.5] Run: project={project_id}, user={user_id}, mode={mode}"
+            f"[ChatService 1.5] Run: project={project_id}, user={user_id}, mode={mode}, direct_apply={direct_apply}"
         )
 
         # Build the query with context
@@ -125,6 +128,7 @@ class ChatService:
             project_id=project_id,
             user_id=user_id,
             mode=mode,
+            direct_apply=direct_apply,
         )
 
         # Create main agent
