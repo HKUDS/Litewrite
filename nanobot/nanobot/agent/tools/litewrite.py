@@ -48,6 +48,16 @@ class LitewriteClient:
             if owner_id:
                 data["ownerId"] = owner_id
             result = await self.request("/api/internal/projects/list", data)
+
+            # If the API call itself failed (e.g. ownerId missing → 400),
+            # skip validation and let the downstream call proceed.
+            if not result.get("success"):
+                logger.warning(
+                    f"Project list API failed: {result.get('error', 'unknown')}; "
+                    "skipping validation"
+                )
+                return True, ""
+
             projects = result.get("data", {}).get("projects", [])
             ids = {p["id"] for p in projects}
             if project_id in ids:
