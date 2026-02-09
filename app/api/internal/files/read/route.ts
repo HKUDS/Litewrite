@@ -39,10 +39,18 @@ export async function POST(request: NextRequest) {
     const { projectId, userId, filePath, startLine, endLine } = body;
 
     if (!projectId || !filePath) {
-      return NextResponse.json({
-        success: false,
-        error: "projectId and filePath are required",
-      });
+      return NextResponse.json(
+        { success: false, error: "projectId and filePath are required" },
+        { status: 400 }
+      );
+    }
+
+    // Validate filePath to prevent path traversal
+    if (filePath.includes("..") || filePath.startsWith("/")) {
+      return NextResponse.json(
+        { success: false, error: "Invalid file path" },
+        { status: 400 }
+      );
     }
 
     // Get effective content (Yjs + pending edits)

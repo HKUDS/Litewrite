@@ -157,10 +157,14 @@ Focus on technical terms, method names, and domain-specific vocabulary."""
             self._log(f"  {paper.arxiv_id}: {len(chunks)} chunks")
 
             if chunks:
-                # Re-rank chunks
-                relevant_chunks = await self._rerank_chunks_by_embedding(
-                    chunks, query, top_n=3
-                )
+                # Re-rank chunks (graceful fallback if embedding unavailable)
+                try:
+                    relevant_chunks = await self._rerank_chunks_by_embedding(
+                        chunks, query, top_n=3
+                    )
+                except Exception as e:
+                    logger.warning(f"Chunk rerank failed for {paper.arxiv_id}: {e}")
+                    relevant_chunks = chunks[:3]
                 paper.chunks = chunks
                 return RAGResult(paper=paper, relevant_chunks=relevant_chunks)
 
@@ -220,11 +224,18 @@ Focus on technical terms, method names, and domain-specific vocabulary."""
                     "papers": [],
                 }
 
-            # 3) Paper-level re-ranking
-            papers = await self._rerank_papers_by_embedding(
-                papers, query, top_n=max_papers
-            )
-            self._log(f"Selected top {len(papers)} papers")
+            # 3) Paper-level re-ranking (graceful fallback if embedding unavailable)
+            try:
+                papers = await self._rerank_papers_by_embedding(
+                    papers, query, top_n=max_papers
+                )
+                self._log(f"Selected top {len(papers)} papers (reranked)")
+            except Exception as e:
+                self._log(f"Embedding rerank failed ({e}), using raw order")
+                logger.warning(
+                    f"Embedding rerank failed, falling back to raw results: {e}"
+                )
+                papers = papers[:max_papers]
 
             # 4) Process each paper (download, chunk, retrieve)
             rag_results: List[RAGResult] = []
@@ -257,13 +268,13 @@ Focus on technical terms, method names, and domain-specific vocabulary."""
 
                 # Paper context
                 paper_context = [
-                    f"{'='*60}",
+                    f"{'=' * 60}",
                     f"[{paper.arxiv_id}] {paper.title}",
                     f"Authors: {', '.join(paper.authors[:5])}{'...' if len(paper.authors) > 5 else ''}",
                     f"Year: {paper.year}",
                     f"URL: {paper.url}",
                     f"Relevance: {paper.relevance_score:.3f}",
-                    f"{'='*60}",
+                    f"{'=' * 60}",
                     "",
                     "Abstract:",
                     paper.abstract,

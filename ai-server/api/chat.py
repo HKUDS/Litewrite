@@ -21,8 +21,9 @@ Endpoints:
 - POST /continue: Continue after tool execution (legacy)
 """
 
+import hmac
 import logging
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -30,6 +31,19 @@ from typing import Optional, List, Dict, Any
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _is_internal_request(request: Request) -> bool:
+    """Check if the request carries a valid X-Internal-Secret header."""
+    from core.config import config
+
+    secret = config.internal_api_secret
+    if not secret:
+        return False
+    provided = request.headers.get("X-Internal-Secret", "")
+    if not provided:
+        return False
+    return hmac.compare_digest(secret, provided)
 
 
 # ============================================================================
@@ -113,6 +127,10 @@ class ChatRequest(BaseModel):
     # Mode: "ask" (read-only) or "agent" (full editing)
     mode: str = "ask"
 
+    # Direct apply mode: when True, file edits are written directly to storage
+    # instead of creating shadow documents. Used by nanobot/API consumers.
+    directApply: bool = False
+
     # Session support
     sessionId: Optional[str] = None
 
@@ -142,13 +160,24 @@ class ChatRequest(BaseModel):
     conversationId: Optional[str] = None
 
 
+class SyncChatRequest(BaseModel):
+    """Synchronous chat request for programmatic invocation (e.g., from nanobot)"""
+
+    projectId: str
+    message: str
+    userId: Optional[str] = None
+    mode: str = "agent"
+    referencedFiles: Optional[List[str]] = []
+    conversationHistory: Optional[List[Dict[str, Any]]] = None
+
+
 # ============================================================================
 # API Endpoints
 # ============================================================================
 
 
 @router.post("/run")
-async def run_chat(request: ChatRequest):
+async def run_chat(request: ChatRequest, raw_request: Request):
     """
     Chat execution endpoint (SSE streaming output)
 
@@ -177,6 +206,14 @@ async def run_chat(request: ChatRequest):
     from services.chat_1_5 import ChatService
 
     service = ChatService(verbose=True)
+
+    # Security: directApply bypasses the shadow-document review flow and writes
+    # edits straight to storage. Only honour it for trusted (internal) callers.
+    direct_apply = request.directApply and _is_internal_request(raw_request)
+    if request.directApply and not direct_apply:
+        logger.warning(
+            "[chat/run] directApply requested but caller is not authenticated; ignoring"
+        )
 
     # Convert attachments format
     attachments = [
@@ -225,6 +262,7 @@ async def run_chat(request: ChatRequest):
             session_id=request.sessionId or request.conversationId,
             mode=request.mode,  # "ask" or "agent"
             user_id=request.actorId,
+            direct_apply=direct_apply,
         ):
             yield output.to_sse()
 
@@ -275,3 +313,65 @@ async def get_config():
         "compressionThreshold": config.context_compression_threshold,
         "compressionTarget": config.context_compression_target,
     }
+
+
+@router.post("/run-sync")
+async def run_chat_sync(request: SyncChatRequest, raw_request: Request):
+    """
+    Synchronous chat endpoint for programmatic invocation.
+
+    Unlike /run which streams SSE events, this endpoint waits for the agent
+    to complete and returns a JSON response. Used by nanobot and other API
+    consumers that need to invoke litewrite's built-in AI agent.
+
+    The agent runs in direct-apply mode: file edits are written directly
+    to storage (via /api/internal/files/edit) instead of creating shadow
+    documents that require frontend review.
+
+    Requires X-Internal-Secret header for authentication.
+
+    Returns:
+        JSON with success status and the agent's response text.
+    """
+    # Security: /run-sync always uses direct_apply=True, so it must be
+    # restricted to internal callers to prevent unauthenticated direct writes.
+    if not _is_internal_request(raw_request):
+        return {
+            "success": False,
+            "error": "Unauthorized: X-Internal-Secret required",
+            "response": "",
+        }
+
+    from services.chat_1_5 import ChatService
+
+    service = ChatService(verbose=True)
+
+    # Build query with file references if provided
+    query_parts = [request.message]
+    if request.referencedFiles:
+        refs = [f"[[FILE:{f}]]" for f in request.referencedFiles]
+        query_parts = [" ".join(refs) + " " + request.message]
+    query = "\n".join(query_parts)
+
+    try:
+        result = await service.run_sync(
+            project_id=request.projectId,
+            user_id=request.userId or "",
+            query=query,
+            mode=request.mode,
+            conversation_history=request.conversationHistory,
+            direct_apply=True,  # Always direct-apply for sync endpoint
+        )
+
+        return {
+            "success": True,
+            "response": result,
+        }
+
+    except Exception as e:
+        logger.error(f"[run-sync] Error: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
+            "response": "",
+        }

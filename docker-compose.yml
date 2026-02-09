@@ -158,7 +158,7 @@ services:
       # Embedding config
       - EMBEDDING_API_BASE=${EMBEDDING_API_BASE:-https://api.openai.com/v1}
       - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-large}
       # Web Search config
       - SERPER_API_KEY=${SERPER_API_KEY:-}
       # WebSocket service URL (internal)
@@ -245,6 +245,40 @@ services:
     networks:
       - litewrite-network
 
+  # ============================================================================
+  # nanobot AI assistant (Telegram/Feishu bot + Litewrite integration)
+  # ============================================================================
+  nanobot:
+    build:
+      context: ./nanobot
+      dockerfile: Dockerfile.dev
+    container_name: litewrite-nanobot
+    volumes:
+      - nanobot-data:/root/.nanobot
+      # Mount source for hot reload during development
+      - ./nanobot:/app
+    environment:
+      # Litewrite integration
+      - NANOBOT__LITEWRITE__URL=http://web:3000
+      - NANOBOT__LITEWRITE__API_SECRET=${INTERNAL_API_SECRET:-dev-internal-secret}
+      - NANOBOT__LITEWRITE__AI_SERVER_URL=http://ai-server:6612
+      # Telegram channel
+      - NANOBOT__CHANNELS__TELEGRAM__ENABLED=${TELEGRAM_ENABLED:-false}
+      - NANOBOT__CHANNELS__TELEGRAM__TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      # Feishu channel
+      - NANOBOT__CHANNELS__FEISHU__ENABLED=${FEISHU_ENABLED:-false}
+      - NANOBOT__CHANNELS__FEISHU__APP_ID=${FEISHU_APP_ID:-}
+      - NANOBOT__CHANNELS__FEISHU__APP_SECRET=${FEISHU_APP_SECRET:-}
+      - NANOBOT__CHANNELS__FEISHU__DEFAULT_LITEWRITE_USER_ID=${NANOBOT_DEFAULT_LITEWRITE_USER_ID:-}
+      # LLM provider & model
+      - NANOBOT__PROVIDERS__OPENROUTER__API_KEY=${OPENROUTER_API_KEY:-}
+      - NANOBOT__AGENTS__DEFAULTS__MODEL=${NANOBOT_LLM_MODEL:-anthropic/claude-sonnet-4-5}
+    depends_on:
+      - web
+    restart: unless-stopped
+    networks:
+      - litewrite-network
+
   # MinIO init (create bucket)
   minio-init:
     image: minio/mc:latest
@@ -272,6 +306,8 @@ volumes:
   compile-cache:
     driver: local
   redis-data:
+    driver: local
+  nanobot-data:
     driver: local
 
 # ==============================================================================

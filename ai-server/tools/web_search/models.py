@@ -92,11 +92,11 @@ class WebRAGResult:
     def to_context(self, max_chunks: int = 3, max_chunk_length: int = 1500) -> str:
         """Format as LLM context."""
         context_parts = [
-            f"{'='*60}",
+            f"{'=' * 60}",
             f"🌐 {self.page.title}",
             f"🔗 URL: {self.page.url}",
             f"📊 Relevance: {self.page.relevance_score:.3f}",
-            f"{'='*60}",
+            f"{'=' * 60}",
             "",
         ]
 

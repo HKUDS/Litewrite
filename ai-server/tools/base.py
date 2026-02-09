@@ -173,6 +173,7 @@ class ToolContext:
     project_id: str
     user_id: Optional[str] = None
     mode: str = "ask"
+    direct_apply: bool = False  # When True, file edits bypass shadow documents and write directly to storage
     _emitter: Optional[Callable[[str, Dict[str, Any]], None]] = None
     _collected_events: List[Dict[str, Any]] = field(default_factory=list)
     _is_subagent: bool = False
@@ -334,6 +335,7 @@ class ToolContext:
             project_id=self.project_id,
             user_id=self.user_id,
             mode=self.mode,
+            direct_apply=self.direct_apply,
             _emitter=self._emitter,
             _collected_events=[],  # SubAgent has its own event collection
             _is_subagent=True,

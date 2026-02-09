@@ -258,7 +258,7 @@ export function useCompile({
       isCompilingRef.current = false;
       clearProgressInterval();
     }
-  }, [projectId, autoSaveVersion, startProgressSimulation, clearProgressInterval, t]);
+  }, [projectId, autoSaveVersion, startProgressSimulation, clearProgressInterval, t, tHistory]);
 
   // Cleanup timer
   useEffect(() => {
