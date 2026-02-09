@@ -120,10 +120,11 @@ class TelegramChannel(BaseChannel):
             )
         )
 
-        # Add /start command handler
+        # Add command handlers
         from telegram.ext import CommandHandler
 
         self._app.add_handler(CommandHandler("start", self._on_start))
+        self._app.add_handler(CommandHandler("clear", self._on_clear))
 
         logger.info("Starting Telegram bot (polling mode)...")
 
@@ -254,6 +255,37 @@ class TelegramChannel(BaseChannel):
         await update.message.reply_text(
             f"👋 Hi {user.first_name}! I'm nanobot.\n\n"
             "Send me a message and I'll respond!"
+        )
+
+    async def _on_clear(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Handle /clear command by forwarding it to the agent loop."""
+        if not update.message or not update.effective_user:
+            return
+
+        user = update.effective_user
+        chat_id = update.message.chat_id
+        sender_id = str(user.id)
+        if user.username:
+            sender_id = f"{sender_id}|{user.username}"
+
+        # Store chat_id for replies
+        self._chat_ids[sender_id] = chat_id
+
+        # Forward "/clear" as a regular message to the agent loop
+        await self._handle_message(
+            sender_id=sender_id,
+            chat_id=str(chat_id),
+            content="/clear",
+            media=[],
+            metadata={
+                "message_id": update.message.message_id,
+                "user_id": user.id,
+                "username": user.username,
+                "first_name": user.first_name,
+                "is_group": update.message.chat.type != "private",
+            },
         )
 
     async def _on_message(
