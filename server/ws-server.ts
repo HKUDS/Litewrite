@@ -123,63 +123,69 @@ async function getYDoc(docName: string): Promise<DocData> {
 
   // Start initialization
   const initPromise = (async () => {
-    const doc = new Y.Doc();
-    const awareness = new awarenessProtocol.Awareness(doc);
+    try {
+      const doc = new Y.Doc();
+      const awareness = new awarenessProtocol.Awareness(doc);
 
-    // Parse room name to get projectId and fileId
-    const parsed = parseRoomName(docName);
-    let persistenceCleanup: (() => void) | undefined;
+      // Parse room name to get projectId and fileId
+      const parsed = parseRoomName(docName);
+      let persistenceCleanup: (() => void) | undefined;
 
-    if (parsed) {
-      const { projectId, fileId } = parsed;
+      if (parsed) {
+        const { projectId, fileId } = parsed;
 
-      // Try restoring document from Redis
-      const restored = await restoreDocument(doc, projectId, fileId);
+        // Try restoring document from Redis
+        const restored = await restoreDocument(doc, projectId, fileId);
 
-      if (restored) {
-        console.log(`📥 Document restored from persistence: ${docName}`);
+        if (restored) {
+          console.log(`📥 Document restored from persistence: ${docName}`);
+        }
+
+        // Bind persistence to auto-save subsequent updates
+        persistenceCleanup = bindDocumentToPersistence(doc, projectId, fileId);
+        console.log(`💾 Persistence bound: ${docName}`);
+      } else {
+        console.log(`⚠️ Failed to parse room name; skipping persistence: ${docName}`);
       }
 
-      // Bind persistence to auto-save subsequent updates
-      persistenceCleanup = bindDocumentToPersistence(doc, projectId, fileId);
-      console.log(`💾 Persistence bound: ${docName}`);
-    } else {
-      console.log(`⚠️ Failed to parse room name; skipping persistence: ${docName}`);
+      // NOTE: We no longer auto-update line numbers for pending edits.
+      // startLine/endLine only keep initial values for chat display.
+      // Editor inline diff uses RelativePosition for precise real-time positions.
+
+      // Listen for awareness changes
+      awareness.on("update", ({ added, updated, removed }: { added: number[]; updated: number[]; removed: number[] }) => {
+        const changedClients = added.concat(updated).concat(removed);
+        const docData = docs.get(docName);
+        if (docData) {
+          const encoder = encoding.createEncoder();
+          encoding.writeVarUint(encoder, messageAwareness);
+          encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(awareness, changedClients));
+          const message = encoding.toUint8Array(encoder);
+
+          docData.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(message);
+            }
+          });
+        }
+      });
+
+      const docData: DocData = {
+        doc,
+        awareness,
+        clients: new Set(),
+        persistenceCleanup,
+      };
+
+      docs.set(docName, docData);
+
+      return docData;
+    } finally {
+      // Always clean up initializingDocs, whether the init succeeded or failed.
+      // Without this, a rejected promise would remain in the map forever,
+      // causing all subsequent getYDoc() calls for this room to fail permanently.
+      initializingDocs.delete(docName);
     }
-
-    // NOTE: We no longer auto-update line numbers for pending edits.
-    // startLine/endLine only keep initial values for chat display.
-    // Editor inline diff uses RelativePosition for precise real-time positions.
-
-    // Listen for awareness changes
-    awareness.on("update", ({ added, updated, removed }: { added: number[]; updated: number[]; removed: number[] }) => {
-      const changedClients = added.concat(updated).concat(removed);
-      const docData = docs.get(docName);
-      if (docData) {
-        const encoder = encoding.createEncoder();
-        encoding.writeVarUint(encoder, messageAwareness);
-        encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(awareness, changedClients));
-        const message = encoding.toUint8Array(encoder);
-
-        docData.clients.forEach((client) => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(message);
-          }
-        });
-      }
-    });
-
-    const docData: DocData = {
-      doc,
-      awareness,
-      clients: new Set(),
-      persistenceCleanup,
-    };
-
-    docs.set(docName, docData);
-    initializingDocs.delete(docName);
-
-    return docData;
   })();
 
   initializingDocs.set(docName, initPromise);
@@ -232,15 +238,29 @@ const server = http.createServer(async (req, res) => {
     }
 
     const prefix = `${projectId}-`;
-    const docNames = Array.from(docs.keys()).filter(
-      (name) => name === projectId || name.startsWith(prefix) || name.startsWith(`ws/${prefix}`)
-    );
+    const matchesProject = (name: string) =>
+      name === projectId || name.startsWith(prefix) || name.startsWith(`ws/${prefix}`);
+
+    // Collect from both docs AND initializingDocs so we don't miss in-flight inits
+    // that would otherwise resurrect stale content after clear finishes.
+    const docNames = new Set([
+      ...Array.from(docs.keys()).filter(matchesProject),
+      ...Array.from(initializingDocs.keys()).filter(matchesProject),
+    ]);
 
     let closedClients = 0;
     let clearedDocs = 0;
 
     for (const docName of docNames) {
-      const docData = docs.get(docName);
+      // If initialization is in-flight, await it so we can tear it down properly.
+      let docData = docs.get(docName);
+      if (!docData && initializingDocs.has(docName)) {
+        try {
+          docData = await initializingDocs.get(docName)!;
+        } catch {
+          // Init failed — nothing to clean up
+        }
+      }
       if (!docData) continue;
 
       // Close all websocket clients to force reconnect
@@ -312,11 +332,20 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const docData = docs.get(roomName);
-      // Cancel in-progress initialization (avoid resurrecting old content after init finishes)
-      initializingDocs.delete(roomName);
+      // Resolve the document — if initialization is in-flight, await it so we
+      // can properly tear it down. Simply deleting from initializingDocs does NOT
+      // cancel the running promise; the promise would still call docs.set() and
+      // resurrect the stale content after /clear finishes.
+      let docData = docs.get(roomName);
+      if (!docData && initializingDocs.has(roomName)) {
+        try {
+          docData = await initializingDocs.get(roomName)!;
+        } catch {
+          // Init failed — nothing to clean up from it
+        }
+      }
 
-      // Clear in-memory doc (if present)
+      // Clear in-memory doc (if present — including freshly-awaited init result)
       if (docData) {
         // Critical: unbind persistence writer first to avoid re-writing updates back to Redis after clearing (race)
         if (docData.persistenceCleanup) {
@@ -383,7 +412,21 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        const docData = docs.get(roomName);
+        // Resolve the target document.
+        // We must check initializingDocs as well: if a client just connected,
+        // getYDoc() may be restoring stale state from Redis. Awaiting the
+        // init promise lets us replace content on the fully-initialized doc
+        // so the new content wins over whatever was restored.
+        let docData = docs.get(roomName);
+
+        if (!docData && initializingDocs.has(roomName)) {
+          // Document initialization is in-flight — wait for it to finish
+          // so we can replace its (potentially stale) content in-place.
+          console.log(
+            `🔄 /replace: Awaiting in-flight init for ${projectId}/${decodedFileId}`
+          );
+          docData = await initializingDocs.get(roomName)!;
+        }
 
         if (docData) {
           // Document is in memory — replace Y.Text content in-place
@@ -399,7 +442,7 @@ const server = http.createServer(async (req, res) => {
             `${content.length} chars, clients=${docData.clients.size}`
           );
         } else {
-          // Document is NOT in memory (no active connections).
+          // Document is NOT in memory (no active connections, no in-flight init).
           // Clear any stale Redis state so the next connection loads from S3
           // (which was already updated by the caller).
           await clearPersistence(projectId, decodedFileId);
@@ -432,7 +475,11 @@ const server = http.createServer(async (req, res) => {
     // Decode URL-encoded filename (e.g. main.tex)
     const decodedFileId = decodeURIComponent(fileId);
     const roomName = `${projectId}-${decodedFileId}`;
-    const docData = docs.get(roomName);
+    // Also await in-flight initialization so we don't 404 while a doc is loading.
+    let docData = docs.get(roomName);
+    if (!docData && initializingDocs.has(roomName)) {
+      docData = await initializingDocs.get(roomName)!;
+    }
 
     if (!docData) {
       res.writeHead(404, { "Content-Type": "application/json" });
@@ -480,10 +527,14 @@ const server = http.createServer(async (req, res) => {
       body += chunk.toString();
     });
 
-    req.on("end", () => {
+    req.on("end", async () => {
       try {
         const { content, blocks } = JSON.parse(body);
-        const docData = docs.get(roomName);
+        // Also await in-flight initialization so updates aren't silently dropped.
+        let docData = docs.get(roomName);
+        if (!docData && initializingDocs.has(roomName)) {
+          docData = await initializingDocs.get(roomName)!;
+        }
 
         if (!docData) {
           console.log(`[POST] ❌ Document not in memory: ${roomName}, rooms:`, Array.from(docs.keys()));
@@ -961,7 +1012,27 @@ wss.on("connection", async (ws: WebSocket, req) => {
   }
 
   // Regular Yjs doc room (async init with Redis restore)
-  const docData = await getYDoc(docName);
+  let docData: DocData;
+  try {
+    docData = await getYDoc(docName);
+  } catch (err) {
+    console.error(`❌ Failed to initialize doc for connection: ${docName}`, err);
+    try { ws.close(1011, "internal_error"); } catch { /* ignore */ }
+    return;
+  }
+
+  // If the socket closed while we were waiting for getYDoc(), skip setup
+  // to avoid adding a zombie client that can never be removed (the 'close'
+  // event already fired before we registered its handler).
+  if (ws.readyState !== WebSocket.OPEN) {
+    console.log(`⚠️ WebSocket closed during init, skipping setup: ${docName}`);
+    // Use delayed cleanup (same as normal close path) to avoid racing with
+    // concurrent connections that also awaited the same init promise and
+    // haven't added themselves to clients yet.
+    setTimeout(() => cleanupDoc(docName), 30_000);
+    return;
+  }
+
   const { doc, awareness } = docData;
   docData.clients.add(ws);
 
