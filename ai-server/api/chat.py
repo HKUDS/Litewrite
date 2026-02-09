@@ -21,8 +21,9 @@ Endpoints:
 - POST /continue: Continue after tool execution (legacy)
 """
 
+import hmac
 import logging
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -30,6 +31,19 @@ from typing import Optional, List, Dict, Any
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _is_internal_request(request: Request) -> bool:
+    """Check if the request carries a valid X-Internal-Secret header."""
+    from core.config import config
+
+    secret = config.internal_api_secret
+    if not secret:
+        return False
+    provided = request.headers.get("X-Internal-Secret", "")
+    if not provided:
+        return False
+    return hmac.compare_digest(secret, provided)
 
 
 # ============================================================================
@@ -163,7 +177,7 @@ class SyncChatRequest(BaseModel):
 
 
 @router.post("/run")
-async def run_chat(request: ChatRequest):
+async def run_chat(request: ChatRequest, raw_request: Request):
     """
     Chat execution endpoint (SSE streaming output)
 
@@ -192,6 +206,14 @@ async def run_chat(request: ChatRequest):
     from services.chat_1_5 import ChatService
 
     service = ChatService(verbose=True)
+
+    # Security: directApply bypasses the shadow-document review flow and writes
+    # edits straight to storage. Only honour it for trusted (internal) callers.
+    direct_apply = request.directApply and _is_internal_request(raw_request)
+    if request.directApply and not direct_apply:
+        logger.warning(
+            "[chat/run] directApply requested but caller is not authenticated; ignoring"
+        )
 
     # Convert attachments format
     attachments = [
@@ -240,7 +262,7 @@ async def run_chat(request: ChatRequest):
             session_id=request.sessionId or request.conversationId,
             mode=request.mode,  # "ask" or "agent"
             user_id=request.actorId,
-            direct_apply=request.directApply,
+            direct_apply=direct_apply,
         ):
             yield output.to_sse()
 
@@ -294,7 +316,7 @@ async def get_config():
 
 
 @router.post("/run-sync")
-async def run_chat_sync(request: SyncChatRequest):
+async def run_chat_sync(request: SyncChatRequest, raw_request: Request):
     """
     Synchronous chat endpoint for programmatic invocation.
 
@@ -306,9 +328,20 @@ async def run_chat_sync(request: SyncChatRequest):
     to storage (via /api/internal/files/edit) instead of creating shadow
     documents that require frontend review.
 
+    Requires X-Internal-Secret header for authentication.
+
     Returns:
         JSON with success status and the agent's response text.
     """
+    # Security: /run-sync always uses direct_apply=True, so it must be
+    # restricted to internal callers to prevent unauthenticated direct writes.
+    if not _is_internal_request(raw_request):
+        return {
+            "success": False,
+            "error": "Unauthorized: X-Internal-Secret required",
+            "response": "",
+        }
+
     from services.chat_1_5 import ChatService
 
     service = ChatService(verbose=True)
