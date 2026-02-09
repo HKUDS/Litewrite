@@ -40,8 +40,8 @@ FROM python:3.12-slim AS runtime
 LABEL maintainer="Litewrite Team"
 LABEL description="Litewrite nanobot Service"
 
-# Create non-root user
-RUN groupadd -r nanobot && useradd -r -g nanobot nanobot
+# Create non-root user with a proper home directory
+RUN groupadd -r nanobot && useradd -r -g nanobot -m -d /home/nanobot nanobot
 
 WORKDIR /app
 
@@ -52,12 +52,14 @@ ENV PATH="/opt/venv/bin:$PATH"
 # Copy application code
 COPY --chown=nanobot:nanobot . .
 
-# Create data directory
-RUN mkdir -p /root/.nanobot && chown -R nanobot:nanobot /root/.nanobot
+# Create data directory at the correct home path
+# (Python's Path.home() resolves to /home/nanobot for the nanobot user)
+RUN mkdir -p /home/nanobot/.nanobot && chown -R nanobot:nanobot /home/nanobot/.nanobot
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+ENV HOME=/home/nanobot
 
 # Switch to non-root user
 USER nanobot

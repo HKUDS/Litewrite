@@ -66,19 +66,30 @@ class BaseChannel(ABC):
         Returns:
             True if allowed, False otherwise.
         """
+        from loguru import logger
+
         allow_list = getattr(self.config, "allow_from", [])
 
-        # If no allow list, allow everyone
+        # If no allow list configured, allow all (but log a warning once)
         if not allow_list:
+            if not getattr(self, "_warned_open_access", False):
+                logger.warning(
+                    f"Channel '{self.name}': allow_from is empty — all senders are allowed. "
+                    "Set allow_from to restrict access."
+                )
+                self._warned_open_access = True
             return True
 
         sender_str = str(sender_id)
+        # Check full sender ID first
         if sender_str in allow_list:
             return True
+        # For composite IDs like "user_id|username", check individual parts
+        # Only the numeric user_id part is trusted (first segment)
         if "|" in sender_str:
-            for part in sender_str.split("|"):
-                if part and part in allow_list:
-                    return True
+            primary_id = sender_str.split("|", 1)[0]
+            if primary_id and primary_id in allow_list:
+                return True
         return False
 
     async def _handle_message(

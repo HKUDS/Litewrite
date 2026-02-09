@@ -41,15 +41,22 @@ export async function POST(request: NextRequest) {
       limit?: number;
     };
 
+    // Security: ownerId is required to prevent cross-tenant data leakage
+    if (!ownerId || typeof ownerId !== "string" || ownerId.trim().length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "ownerId is required for security reasons",
+        },
+        { status: 400 }
+      );
+    }
+
     // Build where clause
     const where: Record<string, unknown> = {
       status: { not: "trashed" },
+      ownerId: ownerId.trim(),
     };
-
-    // Filter by owner if specified
-    if (ownerId) {
-      where.ownerId = ownerId;
-    }
 
     // Search by name (case-insensitive via Prisma contains)
     if (search) {
@@ -93,7 +100,7 @@ export async function POST(request: NextRequest) {
 
     console.log(
       `[Internal/ListProjects] Found ${result.length} projects` +
-        (ownerId ? ` for owner ${ownerId}` : "") +
+        ` for owner ${ownerId}` +
         (search ? ` matching "${search}"` : "")
     );
 

@@ -99,7 +99,7 @@ class ExecToolConfig(BaseModel):
 
     timeout: int = 60
     restrict_to_workspace: bool = (
-        False  # If true, block commands accessing paths outside workspace
+        True  # Block commands accessing paths outside workspace
     )
 
 
@@ -115,6 +115,7 @@ class LitewriteConfig(BaseModel):
 
     url: str = "http://web:3000"  # Litewrite API base URL (Docker network)
     api_secret: str = ""  # INTERNAL_API_SECRET for authentication
+    ai_server_url: str = "http://ai-server:6612"  # AI server URL (Docker network)
 
 
 class Config(BaseSettings):

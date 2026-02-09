@@ -158,7 +158,7 @@ services:
       # Embedding config
       - EMBEDDING_API_BASE=${EMBEDDING_API_BASE:-https://api.openai.com/v1}
       - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-large}
       # Web Search config
       - SERPER_API_KEY=${SERPER_API_KEY:-}
       # WebSocket service URL (internal)
@@ -261,6 +261,7 @@ services:
       # Litewrite integration
       - NANOBOT__LITEWRITE__URL=http://web:3000
       - NANOBOT__LITEWRITE__API_SECRET=${INTERNAL_API_SECRET:-dev-internal-secret}
+      - NANOBOT__LITEWRITE__AI_SERVER_URL=http://ai-server:6612
       # Telegram channel
       - NANOBOT__CHANNELS__TELEGRAM__ENABLED=${TELEGRAM_ENABLED:-false}
       - NANOBOT__CHANNELS__TELEGRAM__TOKEN=${TELEGRAM_BOT_TOKEN:-}

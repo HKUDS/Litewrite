@@ -120,10 +120,10 @@ export async function POST(request: NextRequest) {
     };
 
     if (!projectId) {
-      return NextResponse.json({
-        success: false,
-        error: "projectId is required",
-      });
+      return NextResponse.json(
+        { success: false, error: "projectId is required" },
+        { status: 400 }
+      );
     }
 
     // Look up the project in the database
@@ -132,10 +132,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (!project) {
-      return NextResponse.json({
-        success: false,
-        error: `Project not found: ${projectId}`,
-      });
+      return NextResponse.json(
+        { success: false, error: `Project not found: ${projectId}` },
+        { status: 404 }
+      );
     }
 
     // Read all project files

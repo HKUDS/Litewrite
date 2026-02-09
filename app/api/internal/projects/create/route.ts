@@ -11,6 +11,19 @@ import { v4 as uuidv4 } from "uuid";
 import { prisma } from "@/lib/prisma";
 import { getStorage, StoragePaths } from "@/lib/storage";
 
+// Verify internal API secret
+function verifyInternalAuth(request: NextRequest): boolean {
+  const secret = request.headers.get("X-Internal-Secret");
+  const expectedSecret = process.env.INTERNAL_API_SECRET;
+
+  if (!expectedSecret) {
+    console.warn("[Internal API] INTERNAL_API_SECRET not configured");
+    return false;
+  }
+
+  return secret === expectedSecret;
+}
+
 // Default LaTeX template - Chinese (ctex)
 const DEFAULT_TEMPLATE_ZH = `\\documentclass{article}
 \\usepackage{ctex}
@@ -55,16 +68,6 @@ function getDefaultTemplate(locale: string): string {
   return locale === "zh" ? DEFAULT_TEMPLATE_ZH : DEFAULT_TEMPLATE_EN;
 }
 
-function verifyInternalAuth(request: NextRequest): boolean {
-  const secret = request.headers.get("X-Internal-Secret");
-  const expectedSecret = process.env.INTERNAL_API_SECRET;
-  if (!expectedSecret) {
-    console.warn("[Internal API] INTERNAL_API_SECRET not configured");
-    return false;
-  }
-  return secret === expectedSecret;
-}
-
 export async function POST(request: NextRequest) {
   if (!verifyInternalAuth(request)) {
     return NextResponse.json(
@@ -75,11 +78,12 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, ownerId, description, locale = "en" } = body as {
+    const { name, ownerId, description, locale = "en", mainFileContent } = body as {
       name: string;
       ownerId: string;
       description?: string;
       locale?: string;
+      mainFileContent?: string;
     };
 
     if (!name || typeof name !== "string" || name.trim().length === 0) {
@@ -114,8 +118,9 @@ export async function POST(request: NextRequest) {
     // Create files via the storage abstraction
     const storage = await getStorage();
 
-    // Create default main.tex
-    const mainTexContent = getDefaultTemplate(locale).replace("%TITLE%", name.trim());
+    // Create default main.tex (use provided content or default template)
+    const mainTexContent =
+      mainFileContent || getDefaultTemplate(locale).replace("%TITLE%", name.trim());
     const mainTexKey = StoragePaths.projectFile(projectId, "main.tex");
     await storage.upload(mainTexKey, mainTexContent, "text/x-tex");
 
@@ -127,6 +132,7 @@ export async function POST(request: NextRequest) {
       mainFile: "main.tex",
       createdAt: project.createdAt.toISOString(),
       updatedAt: project.updatedAt.toISOString(),
+      template: "nanobot",
     };
     const metaKey = StoragePaths.projectFile(projectId, "project.json");
     await storage.upload(metaKey, JSON.stringify(meta, null, 2), "application/json");
@@ -140,6 +146,7 @@ export async function POST(request: NextRequest) {
           id: project.id,
           name: project.name,
           description: project.description,
+          mainFile: project.mainFile,
           visibility: project.visibility,
           createdAt: project.createdAt.toISOString(),
           updatedAt: project.updatedAt.toISOString(),

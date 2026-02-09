@@ -15,9 +15,12 @@ For algorithm work:
 """
 
 import asyncio
+import logging
 from typing import Dict, Any, List
 
 from core import EmbeddingEngine
+
+logger = logging.getLogger(__name__)
 
 from tools.web_search.models import SearchResult, WebPage, TextChunk, WebRAGResult
 from tools.web_search.search import WebSearchClient
@@ -120,10 +123,14 @@ class WebSearchTool:
             self._log(f"  {page.url[:40]}...: {len(chunks)} chunks")
 
             if chunks:
-                # Re-rank chunks
-                relevant_chunks = await self._rerank_chunks_by_embedding(
-                    chunks, query, top_n=3
-                )
+                # Re-rank chunks (graceful fallback if embedding unavailable)
+                try:
+                    relevant_chunks = await self._rerank_chunks_by_embedding(
+                        chunks, query, top_n=3
+                    )
+                except Exception as e:
+                    logger.warning(f"Chunk rerank failed for {page.url[:40]}: {e}")
+                    relevant_chunks = chunks[:3]
                 page.chunks = chunks
                 return WebRAGResult(page=page, relevant_chunks=relevant_chunks)
 
@@ -179,11 +186,18 @@ class WebSearchTool:
                     "results": [],
                 }
 
-            # 2) Result-level re-ranking
-            results = await self._rerank_results_by_embedding(
-                results, query, top_n=max_results
-            )
-            self._log(f"Selected top {len(results)} results")
+            # 2) Result-level re-ranking (graceful fallback if embedding unavailable)
+            try:
+                results = await self._rerank_results_by_embedding(
+                    results, query, top_n=max_results
+                )
+                self._log(f"Selected top {len(results)} results (reranked)")
+            except Exception as e:
+                self._log(f"Embedding rerank failed ({e}), using raw order")
+                logger.warning(
+                    f"Embedding rerank failed, falling back to raw results: {e}"
+                )
+                results = results[:max_results]
 
             # 3) Process each page (download, chunk, retrieve)
             rag_results: List[WebRAGResult] = []

@@ -176,6 +176,18 @@ User sends a ZIP file and says: "Create a project from this file"
 3. `litewrite_save_version(project_id, name="Before restore")` → save current state first
 4. `litewrite_restore_version(project_id, version_id)` → restore to chosen version
 
+### Deep Research (MANDATORY workflow)
+
+When the user asks to research/survey/investigate a topic, you MUST follow ALL these steps:
+
+1. **Research**: Use `litewrite_deep_research(query="...")` — this returns a Markdown report with citations and BibTeX
+2. **Create project**: Use `litewrite_create_project(name="<topic> Survey", main_file_content="<LaTeX version of the report>")` — convert the Markdown report to a proper LaTeX document with `\documentclass`, `\begin{document}`, sections, `\bibliography`, etc.
+3. **Compile**: Use `litewrite_compile(project_id, compiler="xelatex")` to build the PDF
+4. **Send PDF**: Use `message(content="...", media=[pdf_path])` to send the compiled PDF to the user
+
+**NEVER skip steps 2-4.** The user expects a compiled PDF, not raw Markdown text.
+**NEVER just send the Markdown report as a text message.** Always compile it into a PDF first.
+
 ## CRITICAL Rules
 
 ### Response Pattern
@@ -193,6 +205,10 @@ Every time you receive a user message, follow this pattern:
 - The agent reads files automatically — you do NOT need to read them first.
 - The agent applies edits directly. Changes take effect immediately.
 - For complex tasks, the agent may take 30–60 seconds.
+
+### LaTeX Compilation
+- **ALWAYS use `litewrite_compile`** to compile LaTeX documents. NEVER use `exec` to run `pdflatex`, `xelatex`, or `lualatex` directly - the compiler is NOT installed locally.
+- **ALWAYS create a Litewrite project first** (with `litewrite_create_project`) before compiling. Do NOT write `.tex` files locally with `write_file`.
 
 ### Compiler Selection
 - **pdflatex** (default): Standard LaTeX compiler. Works for most English-only documents.

@@ -49,6 +49,9 @@ class SubagentManager:
         self.brave_api_key = brave_api_key
         self.exec_config = exec_config or ExecToolConfig()
         self._running_tasks: dict[str, asyncio.Task[None]] = {}
+        self._max_concurrent = (
+            5  # Limit concurrent subagents to prevent resource exhaustion
+        )
 
     async def spawn(
         self,
@@ -69,6 +72,13 @@ class SubagentManager:
         Returns:
             Status message indicating the subagent was started.
         """
+        # Enforce concurrency limit
+        if len(self._running_tasks) >= self._max_concurrent:
+            return (
+                f"Error: Too many concurrent subagents ({len(self._running_tasks)}/{self._max_concurrent}). "
+                "Please wait for existing tasks to complete before spawning new ones."
+            )
+
         task_id = str(uuid.uuid4())[:8]
         display_label = label or task[:30] + ("..." if len(task) > 30 else "")
 
@@ -101,10 +111,11 @@ class SubagentManager:
 
         try:
             # Build subagent tools (no message tool, no spawn tool)
+            # File tools are workspace-sandboxed
             tools = ToolRegistry()
-            tools.register(ReadFileTool())
-            tools.register(WriteFileTool())
-            tools.register(ListDirTool())
+            tools.register(ReadFileTool(workspace=self.workspace))
+            tools.register(WriteFileTool(workspace=self.workspace))
+            tools.register(ListDirTool(workspace=self.workspace))
             tools.register(
                 ExecTool(
                     working_dir=str(self.workspace),

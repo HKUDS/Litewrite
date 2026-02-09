@@ -3,11 +3,47 @@
 from pathlib import Path
 from typing import Any
 
+
 from nanobot.agent.tools.base import Tool
+
+
+def _resolve_and_check(
+    raw_path: str, workspace: Path | None
+) -> tuple[Path | None, str]:
+    """
+    Resolve a path and verify it is within the allowed workspace.
+
+    Returns (resolved_path, error_message).  error_message is empty on success.
+    """
+    try:
+        file_path = Path(raw_path).expanduser().resolve()
+    except Exception as e:
+        return None, f"Invalid path: {e}"
+
+    if workspace is not None:
+        ws = workspace.expanduser().resolve()
+        # Allow paths under workspace or under ~/.nanobot (data dir)
+        nanobot_data = Path.home() / ".nanobot"
+        nanobot_data_resolved = nanobot_data.resolve()
+        if not (
+            file_path == ws
+            or ws in file_path.parents
+            or file_path == nanobot_data_resolved
+            or nanobot_data_resolved in file_path.parents
+        ):
+            return None, (
+                f"Error: Access denied. Path '{raw_path}' is outside the allowed workspace. "
+                f"Allowed: {ws} and {nanobot_data_resolved}"
+            )
+
+    return file_path, ""
 
 
 class ReadFileTool(Tool):
     """Tool to read file contents."""
+
+    def __init__(self, workspace: Path | None = None):
+        self._workspace = workspace
 
     @property
     def name(self) -> str:
@@ -28,8 +64,11 @@ class ReadFileTool(Tool):
         }
 
     async def execute(self, path: str, **kwargs: Any) -> str:
+        file_path, err = _resolve_and_check(path, self._workspace)
+        if err:
+            return err
+        assert file_path is not None
         try:
-            file_path = Path(path).expanduser()
             if not file_path.exists():
                 return f"Error: File not found: {path}"
             if not file_path.is_file():
@@ -45,6 +84,9 @@ class ReadFileTool(Tool):
 
 class WriteFileTool(Tool):
     """Tool to write content to a file."""
+
+    def __init__(self, workspace: Path | None = None):
+        self._workspace = workspace
 
     @property
     def name(self) -> str:
@@ -66,8 +108,11 @@ class WriteFileTool(Tool):
         }
 
     async def execute(self, path: str, content: str, **kwargs: Any) -> str:
+        file_path, err = _resolve_and_check(path, self._workspace)
+        if err:
+            return err
+        assert file_path is not None
         try:
-            file_path = Path(path).expanduser()
             file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(content, encoding="utf-8")
             return f"Successfully wrote {len(content)} bytes to {path}"
@@ -79,6 +124,9 @@ class WriteFileTool(Tool):
 
 class EditFileTool(Tool):
     """Tool to edit a file by replacing text."""
+
+    def __init__(self, workspace: Path | None = None):
+        self._workspace = workspace
 
     @property
     def name(self) -> str:
@@ -109,8 +157,11 @@ class EditFileTool(Tool):
     async def execute(
         self, path: str, old_text: str, new_text: str, **kwargs: Any
     ) -> str:
+        file_path, err = _resolve_and_check(path, self._workspace)
+        if err:
+            return err
+        assert file_path is not None
         try:
-            file_path = Path(path).expanduser()
             if not file_path.exists():
                 return f"Error: File not found: {path}"
 
@@ -139,6 +190,9 @@ class EditFileTool(Tool):
 class ListDirTool(Tool):
     """Tool to list directory contents."""
 
+    def __init__(self, workspace: Path | None = None):
+        self._workspace = workspace
+
     @property
     def name(self) -> str:
         return "list_dir"
@@ -158,16 +212,19 @@ class ListDirTool(Tool):
         }
 
     async def execute(self, path: str, **kwargs: Any) -> str:
+        file_path, err = _resolve_and_check(path, self._workspace)
+        if err:
+            return err
+        assert file_path is not None
         try:
-            dir_path = Path(path).expanduser()
-            if not dir_path.exists():
+            if not file_path.exists():
                 return f"Error: Directory not found: {path}"
-            if not dir_path.is_dir():
+            if not file_path.is_dir():
                 return f"Error: Not a directory: {path}"
 
             items = []
-            for item in sorted(dir_path.iterdir()):
-                prefix = "📁 " if item.is_dir() else "📄 "
+            for item in sorted(file_path.iterdir()):
+                prefix = "d " if item.is_dir() else "f "
                 items.append(f"{prefix}{item.name}")
 
             if not items:
