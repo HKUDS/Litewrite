@@ -169,7 +169,12 @@ export async function POST(request: NextRequest) {
     try {
       const response = await fetch(`${AI_SERVER_URL}/api/chat/run-sync`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(process.env.INTERNAL_API_SECRET
+            ? { "X-Internal-Secret": process.env.INTERNAL_API_SECRET }
+            : {}),
+        },
         body: JSON.stringify(aiServerPayload),
         signal: controller.signal,
       });
