@@ -239,11 +239,11 @@ class WebSearchTool:
 
                 # Page context
                 page_context = [
-                    f"{'='*60}",
+                    f"{'=' * 60}",
                     f"{page.title}",
                     f"URL: {page.url}",
                     f"Relevance: {page.relevance_score:.3f}",
-                    f"{'='*60}",
+                    f"{'=' * 60}",
                     "",
                 ]
 

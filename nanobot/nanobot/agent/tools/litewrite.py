@@ -52,9 +52,7 @@ class LitewriteClient:
             ids = {p["id"] for p in projects}
             if project_id in ids:
                 return True, ""
-            available = ", ".join(
-                f"{p['name']} [{p['id']}]" for p in projects
-            )
+            available = ", ".join(f"{p['name']} [{p['id']}]" for p in projects)
             return False, (
                 f"Project '{project_id}' not found. "
                 f"Available projects: {available or '(none)'}"
@@ -63,89 +61,6 @@ class LitewriteClient:
             # If validation itself fails, let the call proceed
             logger.warning(f"Project validation failed: {e}")
             return True, ""
-
-
-class LitewriteCreateProjectTool(Tool):
-    """Tool to create a new Litewrite project."""
-
-    def __init__(self, client: LitewriteClient, default_owner_id: str = ""):
-        self._client = client
-        self._default_owner_id = default_owner_id
-
-    @property
-    def name(self) -> str:
-        return "litewrite_create_project"
-
-    @property
-    def description(self) -> str:
-        return (
-            "Create a new LaTeX project in Litewrite. "
-            "Returns the project ID which can be used with other litewrite_* tools. "
-            "Optionally provide the initial main.tex content."
-        )
-
-    @property
-    def parameters(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "description": "The project name",
-                },
-                "description": {
-                    "type": "string",
-                    "description": "Optional project description",
-                },
-                "main_file_content": {
-                    "type": "string",
-                    "description": (
-                        "Optional: the complete LaTeX content for main.tex. "
-                        "If omitted, a default template will be used."
-                    ),
-                },
-            },
-            "required": ["name"],
-        }
-
-    async def execute(
-        self,
-        name: str,
-        description: str = "",
-        main_file_content: str = "",
-        **kwargs: Any,
-    ) -> str:
-        # Security: require default_owner_id to prevent unauthorized project creation
-        if not self._default_owner_id:
-            return (
-                "Error: No default owner ID configured. "
-                "Cannot create project without user scope. "
-                "Please configure NANOBOT_DEFAULT_LITEWRITE_USER_ID."
-            )
-
-        data: dict[str, Any] = {
-            "name": name,
-            "ownerId": self._default_owner_id,
-        }
-
-        if description:
-            data["description"] = description
-        if main_file_content:
-            data["mainFileContent"] = main_file_content
-
-        result = await self._client.request("/api/internal/projects/create", data)
-
-        if not result.get("success"):
-            return f"Error creating project: {result.get('error', 'Unknown error')}"
-
-        project = result.get("data", {})
-        return (
-            f"Project created successfully!\n"
-            f"- ID: {project.get('id')}\n"
-            f"- Name: {project.get('name')}\n"
-            f"- Main file: {project.get('mainFile', 'main.tex')}\n\n"
-            f"You can now use litewrite_edit_file to update the content and litewrite_compile to build the PDF."
-        )
 
 
 class LitewriteListProjectsTool(Tool):
@@ -493,9 +408,7 @@ class LitewriteAgentTool(Tool):
             return f"Litewrite agent error: {error}"
 
         response = result.get("response", "")
-        logger.info(
-            f"Litewrite agent completed: response_len={len(response)}"
-        )
+        logger.info(f"Litewrite agent completed: response_len={len(response)}")
 
         return f"Litewrite agent completed:\n\n{response}"
 
@@ -565,7 +478,11 @@ class LitewriteCompileTool(Tool):
         }
 
     async def execute(
-        self, project_id: str, compiler: str = "pdflatex", auto_save: bool = True, **kwargs: Any
+        self,
+        project_id: str,
+        compiler: str = "pdflatex",
+        auto_save: bool = True,
+        **kwargs: Any,
     ) -> str:
         # Validate project ID before compiling
         valid, err = await self._client.validate_project(
@@ -575,7 +492,9 @@ class LitewriteCompileTool(Tool):
             logger.warning(f"litewrite_compile: {err}")
             return f"Error: {err}"
 
-        logger.info(f"Compiling Litewrite project: {project_id} (compiler={compiler}, auto_save={auto_save})")
+        logger.info(
+            f"Compiling Litewrite project: {project_id} (compiler={compiler}, auto_save={auto_save})"
+        )
 
         data: dict[str, Any] = {"projectId": project_id, "autoSave": auto_save}
         if compiler and compiler != "pdflatex":
@@ -642,7 +561,7 @@ class LitewriteCompileTool(Tool):
 
         version_saved = result.get("data", {}).get("versionSaved")
         if version_saved:
-            lines.append(f"Version auto-saved: \"{version_saved.get('name', '')}\"")
+            lines.append(f'Version auto-saved: "{version_saved.get("name", "")}"')
 
         return "\n".join(lines)
 
@@ -894,9 +813,11 @@ class LitewriteListVersionsTool(Tool):
 
         lines = [f"Versions for project '{project_name}' ({len(versions)} total):"]
         for v in versions:
-            user_name = v.get("user", {}).get("name", "Unknown") if v.get("user") else "Unknown"
+            user_name = (
+                v.get("user", {}).get("name", "Unknown") if v.get("user") else "Unknown"
+            )
             lines.append(
-                f"- [{v['id']}] \"{v['name']}\" "
+                f'- [{v["id"]}] "{v["name"]}" '
                 f"(by {user_name}, {v.get('fileCount', '?')} files, "
                 f"{v['createdAt']})"
             )
@@ -969,14 +890,16 @@ class LitewriteSaveVersionTool(Tool):
 
         if not result.get("success"):
             if result.get("skipped"):
-                return "No changes detected since the last saved version. Nothing to save."
+                return (
+                    "No changes detected since the last saved version. Nothing to save."
+                )
             return f"Error saving version: {result.get('error', 'Unknown error')}"
 
         version = result.get("data", {}).get("version", {})
         return (
             f"Version saved successfully:\n"
             f"- ID: {version.get('id')}\n"
-            f"- Name: \"{version.get('name')}\"\n"
+            f'- Name: "{version.get("name")}"\n'
             f"- Files: {version.get('fileCount', '?')}\n"
             f"- Created: {version.get('createdAt')}"
         )
@@ -1018,9 +941,7 @@ class LitewriteRestoreVersionTool(Tool):
             "required": ["project_id", "version_id"],
         }
 
-    async def execute(
-        self, project_id: str, version_id: str, **kwargs: Any
-    ) -> str:
+    async def execute(self, project_id: str, version_id: str, **kwargs: Any) -> str:
         result = await self._client.request(
             "/api/internal/projects/versions/restore",
             {"projectId": project_id, "versionId": version_id},
@@ -1031,7 +952,7 @@ class LitewriteRestoreVersionTool(Tool):
 
         data = result.get("data", {})
         return (
-            f"Project restored to version \"{data.get('versionName', '')}\" successfully.\n"
+            f'Project restored to version "{data.get("versionName", "")}" successfully.\n'
             f"- Restored files: {data.get('restoredFileCount', 0)}\n"
             f"- Yjs cache cleared: {data.get('clearedYjsKeys', 0)} keys"
         )
@@ -1237,9 +1158,7 @@ class LitewriteDeleteFileTool(Tool):
             "required": ["project_id", "file_path"],
         }
 
-    async def execute(
-        self, project_id: str, file_path: str, **kwargs: Any
-    ) -> str:
+    async def execute(self, project_id: str, file_path: str, **kwargs: Any) -> str:
         result = await self._client.request(
             "/api/internal/files/delete",
             {"projectId": project_id, "filePath": file_path},

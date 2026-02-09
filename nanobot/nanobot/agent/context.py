@@ -192,16 +192,15 @@ When remembering something, write to {workspace_path}/memory/MEMORY.md"""
             if is_image:
                 b64 = base64.b64encode(p.read_bytes()).decode()
                 images.append(
-                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime};base64,{b64}"},
+                    }
                 )
 
             # Build a descriptive line for each file
             type_label = "image" if is_image else (mime or "file")
-            size_str = (
-                f"{size} bytes"
-                if size < 1024
-                else f"{size / 1024:.1f} KB"
-            )
+            size_str = f"{size} bytes" if size < 1024 else f"{size / 1024:.1f} KB"
             file_details.append(f"  - {path} ({type_label}, {size_str})")
 
         if not file_details:

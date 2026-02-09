@@ -133,13 +133,13 @@ class RAGResult:
             max_chunk_length: Max length per chunk
         """
         context_parts = [
-            f"{'='*60}",
+            f"{'=' * 60}",
             f"Paper: {self.paper.title} ({self.paper.year})",
             f"arXiv ID: {self.paper.arxiv_id}",
             f"Authors: {', '.join(self.paper.authors[:5])}",
             f"URL: {self.paper.url}",
             f"Relevance: {self.paper.relevance_score:.3f}",
-            f"{'='*60}",
+            f"{'=' * 60}",
             "",
             "Abstract:",
             self.paper.abstract,

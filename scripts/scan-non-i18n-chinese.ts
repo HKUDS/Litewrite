@@ -34,6 +34,7 @@ const SKIP_DIRS = new Set([
   ".git",
   ".next",
   ".history",
+  ".ruff_cache",
   "node_modules",
   "dist",
   "build",
@@ -43,6 +44,8 @@ const SKIP_DIRS = new Set([
   "projects",
   // User-facing template content may legitimately contain CJK text.
   "templates",
+  // Nanobot is a Python service that legitimately uses Chinese for NLP pattern matching.
+  "nanobot",
 ]);
 
 // Skip local environment files (should not be committed).

@@ -370,7 +370,7 @@ Notes:
         )
         for i, eb in enumerate(edit_blocks):
             logger.debug(
-                f"[EditFile] Step 1 - Block {i+1}: lines {eb.get('start_line')}-{eb.get('end_line')}, "
+                f"[EditFile] Step 1 - Block {i + 1}: lines {eb.get('start_line')}-{eb.get('end_line')}, "
                 f"updated_len={len(eb.get('updated', ''))}, desc={eb.get('description', '')[:80]}"
             )
         logger.debug(
@@ -410,7 +410,9 @@ Notes:
             # Standard mode: use shadow documents via /api/internal/files/write
             # Emit file_locked event
             context.emit("file_locked", {"filePath": file_path})
-            logger.debug(f"[EditFile] Step 2 - Emitted file_locked event for {file_path}")
+            logger.debug(
+                f"[EditFile] Step 2 - Emitted file_locked event for {file_path}"
+            )
 
             try:
                 result = await self._execute_all_edits(
@@ -456,7 +458,9 @@ Notes:
         # Extract updated content from result (for further edits)
         result_data = result.get("data", {})
         # In direct apply mode, updated content is in "content"; in shadow mode, "shadowContent"
-        new_content = result_data.get("content", "") or result_data.get("shadowContent", "")
+        new_content = result_data.get("content", "") or result_data.get(
+            "shadowContent", ""
+        )
         updated_content = ""
         if new_content:
             # Format with line numbers for agent's reference
@@ -685,7 +689,7 @@ Notes:
         )
         for i, edit in enumerate(valid_edits):
             logger.debug(
-                f"[EditFile] Edit block {i+1}: lines {edit['start_line']}-{edit['end_line']}, "
+                f"[EditFile] Edit block {i + 1}: lines {edit['start_line']}-{edit['end_line']}, "
                 f"updated_len={len(edit.get('updated', ''))}, desc={edit.get('description', 'N/A')[:50]}"
             )
         if reasoning:

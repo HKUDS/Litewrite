@@ -840,7 +840,7 @@ Output: {"action": "skip", "confidence": 0.2, "inserted_text": "", "corrections"
             if corrections:
                 for i, corr in enumerate(corrections):
                     logger.info(
-                        f"    [{i+1}] {corr.get('location', 'unknown')}: '{corr.get('search', '')}' -> '{corr.get('replace', '')}'"
+                        f"    [{i + 1}] {corr.get('location', 'unknown')}: '{corr.get('search', '')}' -> '{corr.get('replace', '')}'"
                     )
 
             # 5) Decide whether to complete
@@ -918,7 +918,7 @@ Output: {"action": "skip", "confidence": 0.2, "inserted_text": "", "corrections"
                 location = corr.get("location", "prefix")
 
                 if not search:
-                    logger.debug(f"  Correction [{i+1}]: skipped (empty search)")
+                    logger.debug(f"  Correction [{i + 1}]: skipped (empty search)")
                     continue
 
                 if location == "prefix" and search in final_prefix:

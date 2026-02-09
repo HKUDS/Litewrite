@@ -110,9 +110,7 @@ class SessionGetHistoryTool(_SessionToolBase):
             },
         }
 
-    async def execute(
-        self, count: int = 20, offset: int = 0, **kwargs: Any
-    ) -> str:
+    async def execute(self, count: int = 20, offset: int = 0, **kwargs: Any) -> str:
         if self._session is None:
             return "Error: No active session."
 

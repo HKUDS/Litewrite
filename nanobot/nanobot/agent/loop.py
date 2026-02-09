@@ -354,16 +354,12 @@ class AgentLoop:
                 # Execute tools
                 for tool_call in response.tool_calls:
                     args_str = json.dumps(tool_call.arguments)
-                    logger.info(
-                        f"Executing tool: {tool_call.name}({args_str})"
-                    )
+                    logger.info(f"Executing tool: {tool_call.name}({args_str})")
                     result = await self.tools.execute(
                         tool_call.name, tool_call.arguments
                     )
                     result_preview = result[:200] if len(result) > 200 else result
-                    logger.info(
-                        f"Tool {tool_call.name} result: {result_preview}"
-                    )
+                    logger.info(f"Tool {tool_call.name} result: {result_preview}")
                     messages = self.context.add_tool_result(
                         messages, tool_call.id, tool_call.name, result
                     )

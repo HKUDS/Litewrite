@@ -51,7 +51,9 @@ class MediaManager:
         mgr.cleanup()
     """
 
-    def __init__(self, media_dir: Path | None = None, max_age_days: int = _DEFAULT_MAX_AGE_DAYS):
+    def __init__(
+        self, media_dir: Path | None = None, max_age_days: int = _DEFAULT_MAX_AGE_DAYS
+    ):
         self.media_dir = media_dir or _DEFAULT_MEDIA_DIR
         self.media_dir.mkdir(parents=True, exist_ok=True)
         self.max_age_days = max_age_days

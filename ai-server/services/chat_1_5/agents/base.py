@@ -469,11 +469,11 @@ class BaseAgent(ABC):
 
         Only logs at DEBUG level - requires CHAT_DEBUG=1.
         """
-        logger.debug(f"[{self.name}] {'='*60}")
+        logger.debug(f"[{self.name}] {'=' * 60}")
         logger.debug(f"[{self.name}] LLM REQUEST - Turn {self.turn_count}")
         logger.debug(f"[{self.name}] Model: {self.config.get_model()}")
         logger.debug(f"[{self.name}] Messages: {len(messages)}")
-        logger.debug(f"[{self.name}] {'-'*60}")
+        logger.debug(f"[{self.name}] {'-' * 60}")
 
         for i, msg in enumerate(messages):
             role = msg.get("role", "unknown").upper()
@@ -485,7 +485,7 @@ class BaseAgent(ABC):
                 logger.debug(f"[{self.name}]     {line}")
             logger.debug(f"[{self.name}]")
 
-        logger.debug(f"[{self.name}] {'='*60}")
+        logger.debug(f"[{self.name}] {'=' * 60}")
 
     def _log_llm_response(self, content: str, response: Any) -> None:
         """
@@ -499,18 +499,18 @@ class BaseAgent(ABC):
         if usage:
             tokens_info = f" (tokens: {usage.prompt_tokens}+{usage.completion_tokens}={usage.total_tokens})"
 
-        logger.debug(f"[{self.name}] {'='*60}")
+        logger.debug(f"[{self.name}] {'=' * 60}")
         logger.debug(
             f"[{self.name}] LLM RESPONSE - Turn {self.turn_count}{tokens_info}"
         )
         logger.debug(f"[{self.name}] Content length: {len(content)} chars")
-        logger.debug(f"[{self.name}] {'-'*60}")
+        logger.debug(f"[{self.name}] {'-' * 60}")
 
         # Log content line by line
         for line in content.split("\n"):
             logger.debug(f"[{self.name}]     {line}")
 
-        logger.debug(f"[{self.name}] {'='*60}")
+        logger.debug(f"[{self.name}] {'=' * 60}")
 
     async def _execute_tool_calls(
         self, tool_calls: List[Dict[str, Any]]
@@ -727,7 +727,7 @@ Continue from here. Do NOT repeat actions mentioned in the summary.
         self._execution_tokens = new_tokens
 
         logger.info(
-            f"[{self.name}] Execution context compressed: " f"now {new_tokens} tokens"
+            f"[{self.name}] Execution context compressed: now {new_tokens} tokens"
         )
 
     def _reconstruct_assistant_content(

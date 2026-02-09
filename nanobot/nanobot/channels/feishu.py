@@ -184,7 +184,9 @@ class FeishuChannel(BaseChannel):
 
         return "\n".join(text_parts), image_keys
 
-    async def _download_feishu_image(self, message_id: str, image_key: str) -> str | None:
+    async def _download_feishu_image(
+        self, message_id: str, image_key: str
+    ) -> str | None:
         """Download an image from Feishu using its image_key.
 
         Returns the local file path on success, or None on failure.
@@ -229,7 +231,9 @@ class FeishuChannel(BaseChannel):
             logger.error(f"Error downloading Feishu image {image_key}: {e}")
             return None
 
-    async def _download_feishu_file(self, message_id: str, file_key: str, file_name: str = "") -> str | None:
+    async def _download_feishu_file(
+        self, message_id: str, file_key: str, file_name: str = ""
+    ) -> str | None:
         """Download a file from Feishu using its file_key.
 
         Returns the local file path on success, or None on failure.

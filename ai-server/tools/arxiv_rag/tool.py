@@ -268,13 +268,13 @@ Focus on technical terms, method names, and domain-specific vocabulary."""
 
                 # Paper context
                 paper_context = [
-                    f"{'='*60}",
+                    f"{'=' * 60}",
                     f"[{paper.arxiv_id}] {paper.title}",
                     f"Authors: {', '.join(paper.authors[:5])}{'...' if len(paper.authors) > 5 else ''}",
                     f"Year: {paper.year}",
                     f"URL: {paper.url}",
                     f"Relevance: {paper.relevance_score:.3f}",
-                    f"{'='*60}",
+                    f"{'=' * 60}",
                     "",
                     "Abstract:",
                     paper.abstract,
