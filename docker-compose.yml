@@ -246,7 +246,7 @@ services:
       - litewrite-network
 
   # ============================================================================
-  # nanobot AI assistant (Feishu bot + Litewrite integration)
+  # nanobot AI assistant (Telegram/Feishu bot + Litewrite integration)
   # ============================================================================
   nanobot:
     build:
@@ -270,8 +270,9 @@ services:
       - NANOBOT__CHANNELS__FEISHU__APP_ID=${FEISHU_APP_ID:-}
       - NANOBOT__CHANNELS__FEISHU__APP_SECRET=${FEISHU_APP_SECRET:-}
       - NANOBOT__CHANNELS__FEISHU__DEFAULT_LITEWRITE_USER_ID=${NANOBOT_DEFAULT_LITEWRITE_USER_ID:-}
-      # LLM provider
+      # LLM provider & model
       - NANOBOT__PROVIDERS__OPENROUTER__API_KEY=${OPENROUTER_API_KEY:-}
+      - NANOBOT__AGENTS__DEFAULTS__MODEL=${NANOBOT_LLM_MODEL:-anthropic/claude-sonnet-4-5}
     depends_on:
       - web
     restart: unless-stopped

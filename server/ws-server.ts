@@ -349,6 +349,82 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // POST /replace/:projectId/:fileId - replace document content with new text
+  // Used by: /api/internal/files/edit to push bot-written content into Yjs
+  // so that connected browsers receive the update via sync protocol instead
+  // of losing changes when the browser re-syncs its stale local state.
+  const replaceMatch = url.match(/^\/replace\/([^\/]+)\/(.+)$/);
+  if (req.method === "POST" && replaceMatch) {
+    const [, projectId, fileId] = replaceMatch;
+    const decodedFileId = decodeURIComponent(fileId);
+    const roomName = `${projectId}-${decodedFileId}`;
+
+    // Internal auth
+    if (!process.env.INTERNAL_API_SECRET) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "INTERNAL_API_SECRET not configured" }));
+      return;
+    }
+    if (!requireInternalSecret(req)) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Invalid internal secret" }));
+      return;
+    }
+
+    // Read request body
+    let body = "";
+    req.on("data", (chunk: Buffer) => { body += chunk.toString(); });
+    req.on("end", async () => {
+      try {
+        const { content } = JSON.parse(body) as { content: string };
+        if (typeof content !== "string") {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "content must be a string" }));
+          return;
+        }
+
+        const docData = docs.get(roomName);
+
+        if (docData) {
+          // Document is in memory — replace Y.Text content in-place
+          // This will automatically sync to all connected browsers via the
+          // Yjs update broadcast, and persist to Redis via the bound persistence.
+          const ytext = docData.doc.getText("content");
+          docData.doc.transact(() => {
+            ytext.delete(0, ytext.length);
+            ytext.insert(0, content);
+          });
+          console.log(
+            `🔄 /replace: Updated in-memory doc ${projectId}/${decodedFileId}, ` +
+            `${content.length} chars, clients=${docData.clients.size}`
+          );
+        } else {
+          // Document is NOT in memory (no active connections).
+          // Clear any stale Redis state so the next connection loads from S3
+          // (which was already updated by the caller).
+          await clearPersistence(projectId, decodedFileId);
+          console.log(
+            `🔄 /replace: No in-memory doc for ${projectId}/${decodedFileId}, ` +
+            `cleared Redis persistence`
+          );
+        }
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          success: true,
+          roomName,
+          inMemory: !!docData,
+          contentLength: content.length,
+        }));
+      } catch (err) {
+        console.error("❌ Failed to replace document:", err);
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: false, error: "Failed to replace document" }));
+      }
+    });
+    return;
+  }
+
   // GET /doc/:projectId/:fileId - get document content (used by TAP completion)
   const docMatch = url.match(/^\/doc\/([^\/]+)\/(.+)$/);
   if (req.method === "GET" && docMatch) {

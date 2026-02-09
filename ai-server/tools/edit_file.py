@@ -379,30 +379,53 @@ Notes:
             else "[EditFile] Step 1 - No reasoning provided"
         )
 
-        # Step 2: Execute all edits via Next.js in one batch
+        # Step 2: Execute all edits
         logger.info(
-            f"[EditFile] === Step 2: Executing {len(edit_blocks)} edit(s) via Next.js ==="
+            f"[EditFile] === Step 2: Executing {len(edit_blocks)} edit(s) "
+            f"(direct_apply={context.direct_apply}) ==="
         )
         context.emit_status(f"Applying {len(edit_blocks)} edit(s)...", status="working")
 
-        # Emit file_locked event
-        context.emit("file_locked", {"filePath": file_path})
-        logger.debug(f"[EditFile] Step 2 - Emitted file_locked event for {file_path}")
+        if context.direct_apply:
+            # Direct apply mode: apply edits in memory and write full content
+            # via /api/internal/files/edit (bypasses shadow documents)
+            logger.info("[EditFile] Step 2 - Using direct apply mode")
 
-        try:
-            result = await self._execute_all_edits(
-                file_path=file_path,
-                edit_blocks=edit_blocks,
-                context=context,
-                timeout=timeout,
-            )
-        except Exception as e:
-            logger.error(f"[EditFile] Step 2 FAILED: {e}")
-            return ToolResult(
-                success=False,
-                text=f"Failed to apply edits: {str(e)}",
-                error=str(e),
-            )
+            try:
+                result = await self._execute_direct_apply(
+                    file_path=file_path,
+                    raw_content=raw_content,
+                    edit_blocks=edit_blocks,
+                    context=context,
+                    timeout=timeout,
+                )
+            except Exception as e:
+                logger.error(f"[EditFile] Step 2 FAILED (direct apply): {e}")
+                return ToolResult(
+                    success=False,
+                    text=f"Failed to apply edits: {str(e)}",
+                    error=str(e),
+                )
+        else:
+            # Standard mode: use shadow documents via /api/internal/files/write
+            # Emit file_locked event
+            context.emit("file_locked", {"filePath": file_path})
+            logger.debug(f"[EditFile] Step 2 - Emitted file_locked event for {file_path}")
+
+            try:
+                result = await self._execute_all_edits(
+                    file_path=file_path,
+                    edit_blocks=edit_blocks,
+                    context=context,
+                    timeout=timeout,
+                )
+            except Exception as e:
+                logger.error(f"[EditFile] Step 2 FAILED: {e}")
+                return ToolResult(
+                    success=False,
+                    text=f"Failed to apply edits: {str(e)}",
+                    error=str(e),
+                )
 
         # Handle FILE_LOCKED error - return early with clear message
         if result.get("errorCode") == "FILE_LOCKED":
@@ -432,17 +455,18 @@ Notes:
 
         # Extract updated content from result (for further edits)
         result_data = result.get("data", {})
-        shadow_content = result_data.get("shadowContent", "")
+        # In direct apply mode, updated content is in "content"; in shadow mode, "shadowContent"
+        new_content = result_data.get("content", "") or result_data.get("shadowContent", "")
         updated_content = ""
-        if shadow_content:
+        if new_content:
             # Format with line numbers for agent's reference
-            updated_content = add_line_numbers(shadow_content, 1, None)
+            updated_content = add_line_numbers(new_content, 1, None)
             logger.info(
-                f"[EditFile] Step 2 - Updated content: {len(shadow_content)} chars, {len(shadow_content.splitlines())} lines"
+                f"[EditFile] Step 2 - Updated content: {len(new_content)} chars, {len(new_content.splitlines())} lines"
             )
             logger.debug(f"[EditFile] Step 2 - Updated content:\n{updated_content}...")
         else:
-            logger.warning("[EditFile] Step 2 - No shadowContent in response")
+            logger.warning("[EditFile] Step 2 - No updated content in response")
 
         # Step 3: Generate summary using LLM
         logger.info("[EditFile] === Step 3: Generating summary via LLM ===")
@@ -798,6 +822,99 @@ Notes:
             return {"success": False, "error": f"Connection error: {e}"}
         except Exception as e:
             logger.error(f"[EditFile] Error editing {file_path}: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _execute_direct_apply(
+        self,
+        file_path: str,
+        raw_content: str,
+        edit_blocks: List[Dict[str, Any]],
+        context: ToolContext,
+        timeout: float,
+    ) -> Dict[str, Any]:
+        """
+        Apply edit blocks directly to storage via /api/internal/files/edit.
+
+        This bypasses the shadow document system and writes the full updated
+        content directly to storage. Used when context.direct_apply is True
+        (e.g., when invoked by nanobot).
+
+        Steps:
+        1. Apply edit blocks to raw_content in memory (bottom-to-top)
+        2. Write the full updated content via /api/internal/files/edit
+
+        Returns:
+            Result dict with success/error and updated content
+        """
+        # Apply edit blocks in memory (already sorted descending by start_line)
+        lines = raw_content.split("\n")
+        for block in edit_blocks:
+            start = block["start_line"] - 1  # Convert to 0-indexed
+            end = block["end_line"]  # Exclusive end for slice
+            updated_lines = block["updated"].split("\n")
+            lines[start:end] = updated_lines
+
+        new_content = "\n".join(lines)
+
+        logger.info(
+            f"[EditFile] _execute_direct_apply: Applied {len(edit_blocks)} blocks in memory, "
+            f"content {len(raw_content)} -> {len(new_content)} chars"
+        )
+
+        # Write full content via /api/internal/files/edit
+        url = f"{config.nextjs_api_url}/api/internal/files/edit"
+        payload = {
+            "projectId": context.project_id,
+            "filePath": file_path,
+            "content": new_content,
+        }
+
+        logger.info(f"[EditFile] _execute_direct_apply: POST {url}")
+
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(
+                    url,
+                    json=payload,
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Internal-Secret": config.internal_api_secret,
+                    },
+                )
+
+                logger.info(
+                    f"[EditFile] _execute_direct_apply: status={response.status_code}"
+                )
+
+                if response.status_code != 200:
+                    logger.error(
+                        f"[EditFile] _execute_direct_apply: HTTP error {response.status_code}: {response.text[:500]}"
+                    )
+                    return {"success": False, "error": f"HTTP {response.status_code}"}
+
+                try:
+                    result = response.json()
+                except Exception as json_err:
+                    logger.error(
+                        f"[EditFile] _execute_direct_apply: JSON parse error: {json_err}"
+                    )
+                    return {"success": False, "error": f"JSON parse error: {json_err}"}
+
+                if result.get("success"):
+                    # Include the updated content in the result for the agent
+                    result.setdefault("data", {})
+                    result["data"]["content"] = new_content
+
+                return result
+
+        except httpx.TimeoutException:
+            logger.error(f"[EditFile] Timeout in direct apply for {file_path}")
+            return {"success": False, "error": f"HTTP timeout after {timeout}s"}
+        except httpx.ConnectError as e:
+            logger.error(f"[EditFile] Connection error to {url}: {e}")
+            return {"success": False, "error": f"Connection error: {e}"}
+        except Exception as e:
+            logger.error(f"[EditFile] Error in direct apply for {file_path}: {e}")
             return {"success": False, "error": str(e)}
 
     async def _execute_single_edit(

@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStorage, StoragePaths } from "@/lib/storage";
+import { merkleService } from "@/lib/storage/merkle";
 import { VALID_COMPILERS, Compiler } from "@/lib/compiler-utils";
 
 const COMPILE_SERVER_URL =
@@ -111,9 +112,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { projectId, compiler: requestedCompiler } = body as {
+    const { projectId, compiler: requestedCompiler, autoSave = true, userId } = body as {
       projectId: string;
       compiler?: string;
+      autoSave?: boolean;
+      userId?: string;
     };
 
     if (!projectId) {
@@ -249,12 +252,69 @@ export async function POST(request: NextRequest) {
       `[Internal/Compile] Compilation successful, PDF size: ${pdfBuffer.length} bytes`
     );
 
+    // Clear project-level Yjs caches so the web editor shows fresh content
+    try {
+      const wsServerUrl =
+        process.env.WS_SERVER_URL ||
+        process.env.NEXT_PUBLIC_WS_URL?.replace(/^wss?:\/\//, (m) =>
+          m === "wss://" ? "https://" : "http://"
+        ) ||
+        "http://localhost:1234";
+
+      const base = wsServerUrl.replace(/\/+$/, "");
+      await fetch(`${base}/admin/clear-project/${projectId}`, {
+        method: "POST",
+        headers: process.env.INTERNAL_API_SECRET
+          ? { "x-internal-secret": process.env.INTERNAL_API_SECRET }
+          : undefined,
+      });
+      console.log(
+        `[Internal/Compile] Cleared project Yjs caches for ${projectId}`
+      );
+    } catch (e) {
+      console.warn("[Internal/Compile] Failed to clear project Yjs caches:", e);
+    }
+
+    // Auto-save version after successful compilation
+    let versionSaved: { id: string; name: string } | null = null;
+    if (autoSave) {
+      try {
+        const now = new Date();
+        const dateStr = now.toISOString().replace("T", " ").slice(0, 19);
+        const versionName = `Auto-saved (compile) - ${dateStr}`;
+        const saveUserId = userId || project.ownerId;
+
+        const versionResult = await merkleService.createCommit(
+          projectId,
+          versionName,
+          saveUserId
+        );
+
+        versionSaved = { id: versionResult.id, name: versionName };
+        console.log(
+          `[Internal/Compile] Auto-saved version: "${versionName}" (${versionResult.id})`
+        );
+      } catch (versionError) {
+        // NO_CHANGES_DETECTED is expected if nothing changed since last save
+        if (
+          versionError instanceof Error &&
+          versionError.message === "NO_CHANGES_DETECTED"
+        ) {
+          console.log("[Internal/Compile] Auto-save: no changes detected, skipped");
+        } else {
+          // Version save failure should not affect compile result
+          console.warn("[Internal/Compile] Auto-save version failed:", versionError);
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         pdfBase64: result.pdfBase64,
         pdfFileName,
         logs: result.logs || "",
+        versionSaved,
       },
     });
   } catch (error) {

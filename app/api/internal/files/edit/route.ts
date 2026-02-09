@@ -26,13 +26,19 @@ function verifyInternalAuth(request: NextRequest): boolean {
 }
 
 /**
- * Clear Yjs in-memory document cache on the WS server.
- * This ensures the next time a user opens the file in the editor,
- * they get the updated content from storage.
+ * Push updated content into the WS server's Yjs document.
+ *
+ * If the document is loaded in memory (i.e. a browser has it open), the
+ * ws-server replaces the Y.Text content in-place and the change is
+ * automatically synced to every connected browser via the Yjs protocol.
+ *
+ * If no browser has the document open, the ws-server clears its Redis
+ * persistence so the next connection loads the fresh content from S3.
  */
-async function clearYjsCache(
+async function replaceYjsContent(
   projectId: string,
-  filePath: string
+  filePath: string,
+  content: string
 ): Promise<void> {
   const wsServerUrl =
     process.env.WS_SERVER_URL ||
@@ -43,22 +49,36 @@ async function clearYjsCache(
 
   try {
     const base = wsServerUrl.replace(/\/+$/, "");
-    await fetch(
-      `${base}/clear/${projectId}/${encodeURIComponent(filePath)}`,
+    const resp = await fetch(
+      `${base}/replace/${projectId}/${encodeURIComponent(filePath)}`,
       {
         method: "POST",
-        headers: process.env.INTERNAL_API_SECRET
-          ? { "x-internal-secret": process.env.INTERNAL_API_SECRET }
-          : undefined,
+        headers: {
+          "Content-Type": "application/json",
+          ...(process.env.INTERNAL_API_SECRET
+            ? { "x-internal-secret": process.env.INTERNAL_API_SECRET }
+            : {}),
+        },
+        body: JSON.stringify({ content }),
       }
     );
-    console.log(
-      `[Internal/EditFile] Cleared Yjs cache for ${projectId}/${filePath}`
-    );
+
+    if (!resp.ok) {
+      const text = await resp.text();
+      console.warn(
+        `[Internal/EditFile] WS /replace returned ${resp.status}: ${text}`
+      );
+    } else {
+      const result = await resp.json();
+      console.log(
+        `[Internal/EditFile] Yjs document replaced for ${projectId}/${filePath}` +
+          ` (inMemory=${result.inMemory}, length=${result.contentLength})`
+      );
+    }
   } catch (err) {
     // Non-fatal: WS server may be unavailable
     console.warn(
-      `[Internal/EditFile] Failed to clear Yjs cache for ${filePath}:`,
+      `[Internal/EditFile] Failed to replace Yjs content for ${filePath}:`,
       err
     );
   }
@@ -112,8 +132,8 @@ export async function POST(request: NextRequest) {
       `[Internal/EditFile] Written ${content.length} chars to ${projectId}/${filePath}`
     );
 
-    // Clear Yjs cache so the editor picks up the new content
-    await clearYjsCache(projectId, filePath);
+    // Push new content into the Yjs document so the editor picks it up
+    await replaceYjsContent(projectId, filePath, content);
 
     return NextResponse.json({
       success: true,

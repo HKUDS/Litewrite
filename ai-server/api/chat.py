@@ -113,6 +113,10 @@ class ChatRequest(BaseModel):
     # Mode: "ask" (read-only) or "agent" (full editing)
     mode: str = "ask"
 
+    # Direct apply mode: when True, file edits are written directly to storage
+    # instead of creating shadow documents. Used by nanobot/API consumers.
+    directApply: bool = False
+
     # Session support
     sessionId: Optional[str] = None
 
@@ -140,6 +144,17 @@ class ChatRequest(BaseModel):
     # Legacy fields
     projectContent: Optional[str] = None
     conversationId: Optional[str] = None
+
+
+class SyncChatRequest(BaseModel):
+    """Synchronous chat request for programmatic invocation (e.g., from nanobot)"""
+
+    projectId: str
+    message: str
+    userId: Optional[str] = None
+    mode: str = "agent"
+    referencedFiles: Optional[List[str]] = []
+    conversationHistory: Optional[List[Dict[str, Any]]] = None
 
 
 # ============================================================================
@@ -275,3 +290,54 @@ async def get_config():
         "compressionThreshold": config.context_compression_threshold,
         "compressionTarget": config.context_compression_target,
     }
+
+
+@router.post("/run-sync")
+async def run_chat_sync(request: SyncChatRequest):
+    """
+    Synchronous chat endpoint for programmatic invocation.
+
+    Unlike /run which streams SSE events, this endpoint waits for the agent
+    to complete and returns a JSON response. Used by nanobot and other API
+    consumers that need to invoke litewrite's built-in AI agent.
+
+    The agent runs in direct-apply mode: file edits are written directly
+    to storage (via /api/internal/files/edit) instead of creating shadow
+    documents that require frontend review.
+
+    Returns:
+        JSON with success status and the agent's response text.
+    """
+    from services.chat_1_5 import ChatService
+
+    service = ChatService(verbose=True)
+
+    # Build query with file references if provided
+    query_parts = [request.message]
+    if request.referencedFiles:
+        refs = [f"[[FILE:{f}]]" for f in request.referencedFiles]
+        query_parts = [" ".join(refs) + " " + request.message]
+    query = "\n".join(query_parts)
+
+    try:
+        result = await service.run_sync(
+            project_id=request.projectId,
+            user_id=request.userId or "",
+            query=query,
+            mode=request.mode,
+            conversation_history=request.conversationHistory,
+            direct_apply=True,  # Always direct-apply for sync endpoint
+        )
+
+        return {
+            "success": True,
+            "response": result,
+        }
+
+    except Exception as e:
+        logger.error(f"[run-sync] Error: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
+            "response": "",
+        }

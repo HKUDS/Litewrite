@@ -86,6 +86,7 @@ You are nanobot, a helpful AI assistant. You have access to tools that allow you
 - Search the web and fetch web pages
 - Send messages to users on chat channels
 - Spawn subagents for complex background tasks
+- Manage Litewrite projects (compile, edit, create, etc.)
 
 ## Current Date & Time
 **Today is {now}. The current year is {year}.**
@@ -97,11 +98,27 @@ Your workspace is at: {workspace_path}
 - Daily notes: {workspace_path}/memory/YYYY-MM-DD.md
 - Custom skills: {workspace_path}/skills/{{skill-name}}/SKILL.md
 
-IMPORTANT: When responding to direct questions or conversations, reply directly with your text response.
-Only use the 'message' tool when you need to send a message to a specific chat channel (like WhatsApp).
-For normal conversation, just respond with text - do not call the message tool.
+## CRITICAL RULES — Tool Usage (MUST follow)
 
-Always be helpful, accurate, and concise. When using tools, explain what you're doing.
+1. **ALWAYS use tools for ANY action.** You MUST call the actual tool function.
+   NEVER claim or pretend you performed an action (compile, file edit, send, etc.)
+   without having called the corresponding tool first.
+
+2. **Compilation**: To compile a LaTeX project, you MUST call `litewrite_compile`.
+   The tool will automatically send the PDF to the user — do NOT call message afterwards.
+   NEVER say "编译成功" or "PDF已发送" without having actually called `litewrite_compile`.
+
+3. **File operations**: To read or edit project files, call `litewrite_agent`.
+   To list projects, call `litewrite_list_projects`.
+
+4. **Sending messages**: Only use the `message` tool when you need to send
+   additional messages or file attachments to the user's chat.
+   For normal conversation, just respond with text.
+
+5. **Honesty**: If you cannot complete an action or a tool call fails, tell the
+   user honestly.  NEVER fabricate file paths, tool results, or success messages.
+
+Always be helpful, accurate, and concise.
 When remembering something, write to {workspace_path}/memory/MEMORY.md"""
 
     def _load_bootstrap_files(self) -> str:
@@ -153,24 +170,54 @@ When remembering something, write to {workspace_path}/memory/MEMORY.md"""
     def _build_user_content(
         self, text: str, media: list[str] | None
     ) -> str | list[dict[str, Any]]:
-        """Build user message content with optional base64-encoded images."""
+        """Build user message content with optional base64-encoded images.
+
+        Images are encoded as vision content for multi-modal LLMs.
+        File paths are appended to the text so the LLM can reference them
+        when using tools (e.g., uploading files to a project).
+        """
         if not media:
             return text
 
         images = []
+        file_details: list[str] = []
         for path in media:
             p = Path(path)
-            mime, _ = mimetypes.guess_type(path)
-            if not p.is_file() or not mime or not mime.startswith("image/"):
+            if not p.is_file():
                 continue
-            b64 = base64.b64encode(p.read_bytes()).decode()
-            images.append(
-                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
+            mime, _ = mimetypes.guess_type(path)
+            size = p.stat().st_size
+            is_image = mime is not None and mime.startswith("image/")
+
+            if is_image:
+                b64 = base64.b64encode(p.read_bytes()).decode()
+                images.append(
+                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}}
+                )
+
+            # Build a descriptive line for each file
+            type_label = "image" if is_image else (mime or "file")
+            size_str = (
+                f"{size} bytes"
+                if size < 1024
+                else f"{size / 1024:.1f} KB"
             )
+            file_details.append(f"  - {path} ({type_label}, {size_str})")
+
+        if not file_details:
+            return text
+
+        # Append file path info so the LLM can reference files in tool calls
+        attachment_block = "\n".join(file_details)
+        augmented_text = (
+            f"{text}\n\n"
+            f"[Attached files — use these local paths with tools like "
+            f"litewrite_upload_file:\n{attachment_block}]"
+        )
 
         if not images:
-            return text
-        return images + [{"type": "text", "text": text}]
+            return augmented_text
+        return images + [{"type": "text", "text": augmented_text}]
 
     def add_tool_result(
         self,

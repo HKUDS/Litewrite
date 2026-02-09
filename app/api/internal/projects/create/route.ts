@@ -2,9 +2,8 @@
  * Internal API: Create Project
  * =============================
  *
- * Internal endpoint for nanobot to create a new Litewrite project.
- *
- * This is NOT exposed to the public - protected by INTERNAL_API_SECRET.
+ * Internal endpoint for nanobot to create a new project.
+ * Protected by INTERNAL_API_SECRET.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -25,8 +24,28 @@ function verifyInternalAuth(request: NextRequest): boolean {
   return secret === expectedSecret;
 }
 
-// Default LaTeX template
-const DEFAULT_TEMPLATE = `\\documentclass{article}
+// Default LaTeX template - Chinese (ctex)
+const DEFAULT_TEMPLATE_ZH = `\\documentclass{article}
+\\usepackage{ctex}
+\\usepackage{amsmath}
+\\usepackage{graphicx}
+
+\\title{%TITLE%}
+\\author{Author}
+\\date{\\today}
+
+\\begin{document}
+
+\\maketitle
+
+\\section{Introduction}
+
+Start writing here...
+
+\\end{document}`;
+
+// Default LaTeX template - English
+const DEFAULT_TEMPLATE_EN = `\\documentclass{article}
 \\usepackage[utf8]{inputenc}
 \\usepackage{amsmath}
 \\usepackage{graphicx}
@@ -45,8 +64,11 @@ Start writing here...
 
 \\end{document}`;
 
+function getDefaultTemplate(locale: string): string {
+  return locale === "zh" ? DEFAULT_TEMPLATE_ZH : DEFAULT_TEMPLATE_EN;
+}
+
 export async function POST(request: NextRequest) {
-  // Verify authentication
   if (!verifyInternalAuth(request)) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -56,23 +78,24 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, ownerId, description, mainFileContent } = body as {
+    const { name, ownerId, description, locale = "en", mainFileContent } = body as {
       name: string;
       ownerId: string;
       description?: string;
+      locale?: string;
       mainFileContent?: string;
     };
 
     if (!name || typeof name !== "string" || name.trim().length === 0) {
       return NextResponse.json(
-        { success: false, error: "name is required" },
+        { success: false, error: "Project name is required" },
         { status: 400 }
       );
     }
 
     if (!ownerId || typeof ownerId !== "string") {
       return NextResponse.json(
-        { success: false, error: "ownerId is required" },
+        { success: false, error: "Owner ID is required" },
         { status: 400 }
       );
     }
@@ -92,16 +115,16 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Create files via storage
+    // Create files via the storage abstraction
     const storage = await getStorage();
 
-    // Create main.tex (use provided content or default template)
+    // Create default main.tex (use provided content or default template)
     const mainTexContent =
-      mainFileContent || DEFAULT_TEMPLATE.replace("%TITLE%", name.trim());
+      mainFileContent || getDefaultTemplate(locale).replace("%TITLE%", name.trim());
     const mainTexKey = StoragePaths.projectFile(projectId, "main.tex");
     await storage.upload(mainTexKey, mainTexContent, "text/x-tex");
 
-    // Create project.json (metadata)
+    // Create project.json (metadata backup)
     const meta = {
       id: projectId,
       name: name.trim(),
@@ -114,19 +137,21 @@ export async function POST(request: NextRequest) {
     const metaKey = StoragePaths.projectFile(projectId, "project.json");
     await storage.upload(metaKey, JSON.stringify(meta, null, 2), "application/json");
 
-    console.log(
-      `[Internal/CreateProject] Created project: ${projectId} "${name.trim()}" for owner ${ownerId}`
-    );
+    console.log(`[Internal/CreateProject] Created project "${name.trim()}" (${projectId}) for owner ${ownerId}`);
 
     return NextResponse.json({
       success: true,
       data: {
-        id: project.id,
-        name: project.name,
-        description: project.description,
-        mainFile: project.mainFile,
-        createdAt: project.createdAt.toISOString(),
-        updatedAt: project.updatedAt.toISOString(),
+        project: {
+          id: project.id,
+          name: project.name,
+          description: project.description,
+          mainFile: project.mainFile,
+          visibility: project.visibility,
+          createdAt: project.createdAt.toISOString(),
+          updatedAt: project.updatedAt.toISOString(),
+          ownerId: project.ownerId,
+        },
       },
     });
   } catch (error) {
