@@ -43,7 +43,7 @@
 ## 📰 News
 
 - **2026-02-10** 🤖 **[nanobot × Litewrite](https://github.com/HKUDS/nanobot) — nanobot empowers your vibe writing ([setup guide](nanobot/DEPLOYMENT.md))
-- **2026-02-03** 🎉 **Litewrite v1.0.7** — Open-source release featuring real-time collaboration, LaTeX compilation, and integrated AI chat.
+- **2026-02-03** 🎉 **Litewrite v1.0.7** — Real-time collaboration, LaTeX compilation & AI chat.
 
 ---
 
