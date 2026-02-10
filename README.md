@@ -39,7 +39,7 @@
 </p>
 
 <div align="center">
-[*Try Litewrite:*](https://litewrite.ai/)
+**Try Litewrite:**(https://litewrite.ai/)
 </div>
 
 ---
