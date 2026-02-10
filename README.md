@@ -42,9 +42,8 @@
 
 ## 📰 News
 
-
-- **2026-02-10** 🤖 **[nanobot](https://github.com/HKUDS/nanobot) integration** — Manage projects from Telegram & Feishu via AI assistant ([setup guide](nanobot/DEPLOYMENT.md))
-- **2026-02-03** 🎉 **Litewrite v1.0.7** — Initial open-source release with real-time collaboration, LaTeX compilation, and AI chat
+- **2026-02-10** 🤖 **[nanobot × Litewrite](https://github.com/HKUDS/nanobot) — nanobot empowers your vibe writing ([setup guide](nanobot/DEPLOYMENT.md))
+- **2026-02-03** 🎉 **Litewrite v1.0.7** — Open-source release featuring real-time collaboration, LaTeX compilation, and integrated AI chat.
 
 ---
 
