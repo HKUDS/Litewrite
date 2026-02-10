@@ -43,7 +43,7 @@
 ## 📰 News
 
 
-- **2026-02-10** 🤖 **nanobot integration** — Manage projects from Telegram & Feishu via AI assistant ([setup guide](nanobot/DEPLOYMENT.md))
+- **2026-02-10** 🤖 **[nanobot](https://github.com/HKUDS/nanobot) integration** — Manage projects from Telegram & Feishu via AI assistant ([setup guide](nanobot/DEPLOYMENT.md))
 - **2026-02-03** 🎉 **Litewrite v1.0.7** — Initial open-source release with real-time collaboration, LaTeX compilation, and AI chat
 
 ---
@@ -58,7 +58,7 @@
 
 🔍 **Deep Research** — AI conducts in-depth research and auto-generates reports. Research while you write!
 
-📱 **nanobot** — Chat with your projects from IM apps. Compile, edit, and manage — all from your phone!
+📱 **[nanobot](https://github.com/HKUDS/nanobot)** — Chat with your projects from IM apps. Compile, edit, and manage — all from your phone!
 
 ---
 
@@ -215,9 +215,9 @@ The `ToolContext` provides:
 
 ---
 
-## 📱 nanobot — Chat Platform Integration
+## 📱 [nanobot](https://github.com/HKUDS/nanobot) — Chat Platform Integration
 
-nanobot is an AI assistant that connects messaging platforms (Telegram, Feishu/Lark) to Litewrite, enabling users to manage LaTeX projects through natural language conversations.
+[nanobot](https://github.com/HKUDS/nanobot) is an AI assistant that connects messaging platforms (Telegram, Feishu/Lark) to Litewrite, enabling users to manage LaTeX projects through natural language conversations.
 
 > 📖 For detailed setup instructions, see the [nanobot Deployment Guide](nanobot/DEPLOYMENT.md).
 
@@ -343,7 +343,7 @@ See `env.example.oss` for the complete configuration reference.
 ### 🧠 AI Services
 - **AI Server:** Python FastAPI
 - **LLM:** OpenRouter (multi-model)
-- **nanobot:** Python + LiteLLM
+- **[nanobot](https://github.com/HKUDS/nanobot):** Python + LiteLLM
 - **Channels:** Telegram, Feishu/Lark
 
 </td>
@@ -380,7 +380,7 @@ See `env.example.oss` for the complete configuration reference.
 | 🤖 **Agent Mode** | Full autonomous editing — AI reads, plans, and applies multi-file edits |
 | 🔍 **Deep Research** | Multi-iteration research: web + arXiv search, structured report generation with BibTeX |
 | 📊 **AI Table** | Generate LaTeX tables from natural language descriptions |
-| 📱 **nanobot** | Manage projects from Telegram/Feishu: edit files, compile PDFs, import papers |
+| 📱 **[nanobot](https://github.com/HKUDS/nanobot)** | Manage projects from Telegram/Feishu: edit files, compile PDFs, import papers |
 
 ### 👥 Collaboration & Sharing
 
@@ -581,6 +581,7 @@ Litewrite is built on the shoulders of giants:
 - [Shadcn UI](https://ui.shadcn.com/) — UI components
 - [OpenRouter](https://openrouter.ai/) — LLM routing
 - [LiteLLM](https://github.com/BerriAI/litellm) — LLM provider abstraction
+- [nanobot](https://github.com/HKUDS/nanobot) — Ultra-lightweight AI assistant
 
 ---
 
