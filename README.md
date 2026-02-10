@@ -38,7 +38,9 @@
   <a href="#-contributing">Contributing</a>
 </p>
 
+<div align="center">
 [*Try Litewrite:*](https://litewrite.ai/)
+</div>
 
 ---
 
