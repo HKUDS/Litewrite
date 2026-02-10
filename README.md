@@ -40,23 +40,11 @@
 
 ---
 
-<!-- nanobot demo GIF — eye-catching hero content -->
-<p align="center">
-  <img src="public/screenshots/nanobot-demo.gif" alt="nanobot Demo — Chat with your LaTeX projects from Telegram" width="720" />
-</p>
-<p align="center"><em>💬 Chat with your LaTeX projects from Telegram — edit, compile, and get PDFs in seconds</em></p>
-
----
-
 ## 📰 News
 
-| Date | Update |
-|------|--------|
-| **2025-02** | 🤖 **nanobot integration** — Manage LaTeX projects from Telegram & Feishu via AI assistant ([setup guide](nanobot/DEPLOYMENT.md)) |
-| **2025-02** | 🧠 **Agent Mode** — Full autonomous editing with ReAct-style agent, SubAgent delegation, and multi-file edits |
-| **2025-01** | 🔍 **Deep Research** — Multi-iteration arXiv + web search with structured report generation and BibTeX |
-| **2025-01** | ⚡ **TAP Completion** — Ghost-text AI completion as you type, Copilot-like experience for LaTeX |
-| **2024-12** | 🚀 **Litewrite v1.0** — Initial open-source release with real-time collaboration, LaTeX compilation, and AI chat |
+
+- **2026-02-10** 🤖 **nanobot integration** — Manage projects from Telegram & Feishu via AI assistant ([setup guide](nanobot/DEPLOYMENT.md))
+- **2026-02-03** 🎉 **Litewrite v1.0.7** — Initial open-source release with real-time collaboration, LaTeX compilation, and AI chat
 
 ---
 
@@ -70,7 +58,14 @@
 
 🔍 **Deep Research** — AI conducts in-depth research and auto-generates reports. Research while you write!
 
-📱 **nanobot** — Chat with your LaTeX projects from Telegram or Feishu. Compile, edit, and manage — all from your phone!
+📱 **nanobot** — Chat with your projects from IM apps. Compile, edit, and manage — all from your phone!
+
+---
+
+<p align="center">
+  <img src="public/screenshots/nanobot-demo.gif" alt="nanobot Demo — Chat with your projects from Telegram" width="720" />
+</p>
+<p align="center"><em>💬 Chat with your projects from IM apps</em></p>
 
 ---
 
@@ -127,42 +122,9 @@
 
 Litewrite is a microservices architecture with 6 core services communicating over a Docker network.
 
-<!-- TODO: Replace with architecture image -->
 <p align="center">
   <img src="public/Architecture.png" alt="Litewrite Architecture" width="800" />
 </p>
-
-```
-                                ┌──────────────┐
-                                │   Browser    │
-                                └──────┬───────┘
-                                       │
-                          ┌────────────┼────────────┐
-                          │            │            │
-                          ▼            ▼            ▼
-                    ┌──────────┐ ┌──────────┐ ┌──────────┐
-                    │ Next.js  │ │    WS    │ │  Nginx   │
-                    │  :3000   │ │  :1234   │ │  :6612   │
-                    │ Web+API  │ │ Yjs Sync │ │ LB Proxy │
-                    └────┬─────┘ └──────────┘ └────┬─────┘
-                         │                         │
-              ┌──────────┼──────────┐              │
-              │          │          │              │
-              ▼          ▼          ▼              ▼
-        ┌──────────┐ ┌──────┐ ┌──────────┐  ┌──────────┐
-        │ Compile  │ │Redis │ │  S3/MinIO │  │AI Server │
-        │  :3002   │ │:6379 │ │:9000/9001│  │  (x N)   │
-        │ TeXLive  │ │      │ │          │  │  FastAPI  │
-        └──────────┘ └──────┘ └──────────┘  └──────────┘
-
-        ┌──────────┐
-        │ nanobot  │──► Telegram / Feishu
-        │ (Python) │◄── User Messages
-        └────┬─────┘
-             │
-             ▼
-        Next.js Internal API (X-Internal-Secret)
-```
 
 | Service | Port | Technology | Role |
 |---------|------|------------|------|
@@ -181,26 +143,9 @@ Litewrite is a microservices architecture with 6 core services communicating ove
 
 Litewrite's AI capabilities are powered by a modular Agent system built on Python FastAPI. The architecture follows a **MainAgent + SubAgent** orchestration pattern with a unified Tool layer.
 
-<!-- TODO: Replace with AI architecture image -->
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         AI Server (FastAPI)                         │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  ┌─────────────┐   ┌─────────────┐   ┌─────────────────────────┐   │
-│  │     TAP     │   │Deep Research│   │     Agent System        │   │
-│  │ Completion  │   │   Service   │   │  (Ask / Agent Mode)     │   │
-│  └──────┬──────┘   └──────┬──────┘   └───────────┬─────────────┘   │
-│         │                 │                      │                  │
-│         ▼                 ▼                      ▼                  │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                      LLM Router (OpenRouter)                 │   │
-│  │            Multi-model support: GPT-4o, Claude, Gemini       │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
+<p align="center">
+  <img src="public/AIServer.png" alt="Litewrite AI Architecture" width="800" />
+</p>
 
 ### ⚡ TAP Completion (Type-Ahead Prediction)
 
@@ -217,32 +162,9 @@ Ghost-text AI completion as you type, similar to GitHub Copilot.
 
 The Agent system uses a **ReAct-style** loop with tool calling for complex writing tasks.
 
-<!-- TODO: Replace with Agent architecture image -->
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                          MainAgent                                │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │  System Prompt + <context> + <goal> + <execution_log>      │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                              │                                    │
-│                              ▼                                    │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │                    Agent Loop (ReAct)                       │  │
-│  │  1. Reason: Analyze context and decide next action          │  │
-│  │  2. Act: Call tool (read/edit/search/plan/task)             │  │
-│  │  3. Observe: Process tool result                            │  │
-│  │  4. Repeat until done                                       │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                              │                                    │
-│          ┌───────────────────┼───────────────────┐               │
-│          ▼                   ▼                   ▼               │
-│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐          │
-│  │  SubAgent:   │   │  SubAgent:   │   │  SubAgent:   │          │
-│  │  EditAgent   │   │  ReadAgent   │   │ResearchAgent │          │
-│  └──────────────┘   └──────────────┘   └──────────────┘          │
-└──────────────────────────────────────────────────────────────────┘
-```
+<p align="center">
+  <img src="public/MainAgent.png" alt="Litewrite Main Agent Architecture" width="800" />
+</p>
 
 **Mode-based Tool Availability:**
 
@@ -267,38 +189,9 @@ The Agent system uses a **ReAct-style** loop with tool calling for complex writi
 
 Multi-source research with automatic report generation.
 
-<!-- TODO: Replace with Deep Research image -->
-
-```
-User Query
-    │
-    ▼
-┌─────────────────────────────────┐
-│     Parallel Search Stage       │
-│  ┌───────────┐  ┌───────────┐  │
-│  │  arXiv    │  │   Web     │  │
-│  │  Search   │  │  Search   │  │
-│  └─────┬─────┘  └─────┬─────┘  │
-│        └──────┬───────┘        │
-└───────────────┼────────────────┘
-                ▼
-┌─────────────────────────────────┐
-│    Knowledge Gap Analysis       │
-│  - Assess current knowledge     │
-│  - Decide if follow-up needed   │
-│  - Up to N iterations           │
-└───────────────┬─────────────────┘
-                ▼
-┌─────────────────────────────────┐
-│   Report Generation (Streaming) │
-│  - Structured outline           │
-│  - Section-by-section writing   │
-│  - Inline citations             │
-└───────────────┬─────────────────┘
-                ▼
-        Research Report
-     (with BibTeX references)
-```
+<p align="center">
+  <img src="public/DeepResearch.png" alt="Litewrite Deep Research" width="800" />
+</p>
 
 ### 🔧 Unified Tool Layer
 
@@ -330,21 +223,9 @@ nanobot is an AI assistant that connects messaging platforms (Telegram, Feishu/L
 
 <!-- TODO: Replace with nanobot architecture image -->
 
-```
-┌──────────┐     Long Polling    ┌──────────────┐   Internal API    ┌──────────────┐
-│ Telegram │ ◄─────────────────► │              │ ────────────────► │  Litewrite   │
-│  User    │                     │   nanobot    │                   │  Web (Next)  │
-├──────────┤     WebSocket       │  (Python)    │                   └──────┬───────┘
-│  Feishu  │ ◄─────────────────► │              │                          │
-│  User    │                     └──────┬───────┘                          │
-└──────────┘                            │                                  │
-                                        │ LLM API                         │ Compile
-                                        ▼                                  ▼
-                                  ┌──────────┐                      ┌──────────────┐
-                                  │ OpenRouter│                      │   Compile    │
-                                  │  / LLM   │                      │   Server     │
-                                  └──────────┘                      └──────────────┘
-```
+<p align="center">
+  <img src="public/nanobot.png" alt="Litewrite nanobot Architecture" width="800" />
+</p>
 
 ### 🛠️ Key Capabilities
 
@@ -680,6 +561,12 @@ git push origin feature/your-feature
 # Open a Pull Request
 ```
 
+### Contributors
+
+<a href="https://github.com/HKUDS/litewrite/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=HKUDS/litewrite&max=100&columns=12&updated=20260210" alt="Contributors" />
+</a>
+
 ---
 
 ## 🙏 Acknowledgments
@@ -697,16 +584,21 @@ Litewrite is built on the shoulders of giants:
 
 ---
 
-## 📄 License
+## ⭐ Star History
 
-This project is licensed under **AGPL-3.0-only**. See [`LICENSE`](./LICENSE) for details.
-
-**TL;DR:** You can use, modify, and distribute this software, but if you run a modified version as a service, you must release your source code.
-
----
+<div align="center">
+  <a href="https://star-history.com/#HKUDS/litewrite&Date">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=HKUDS/litewrite&type=Date&theme=dark" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=HKUDS/litewrite&type=Date" />
+      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=HKUDS/litewrite&type=Date" style="border-radius: 15px; box-shadow: 0 0 30px rgba(0, 217, 255, 0.3);" />
+    </picture>
+  </a>
+</div>
 
 <p align="center">
-  Made with ❤️ by the Litewrite Team
+  <em> Thanks for visiting ✨ litewrite!</em><br><br>
+  <img src="https://visitor-badge.laobi.icu/badge?page_id=HKUDS.litewrite&style=for-the-badge&color=00d4ff" alt="Views">
 </p>
 
 <p align="center">
