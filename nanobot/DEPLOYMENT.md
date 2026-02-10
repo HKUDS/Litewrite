@@ -1,34 +1,33 @@
 # nanobot Deployment Guide
 
-nanobot is an AI assistant service integrated into Litewrite. It connects to messaging platforms (Feishu/Lark, Telegram) and enables users to manage LaTeX projects through natural language — listing projects, reading/editing files, compiling to PDF, and sending results back.
+nanobot is an AI assistant service integrated into Litewrite. It connects to messaging platforms (Telegram, Feishu/Lark) and enables users to manage LaTeX projects through natural language — listing projects, reading/editing files, compiling to PDF, importing papers, managing versions, and sending results back.
 
 ## Architecture
 
 ```
-┌──────────┐     WebSocket     ┌──────────────┐    Internal API    ┌──────────────┐
-│  Feishu  │ ◄──────────────► │              │ ─────────────────► │  Litewrite   │
-│  User    │                   │   nanobot    │                    │  Web (Next)  │
-├──────────┤     Polling       │  (Python)    │                    └──────┬───────┘
-│ Telegram │ ◄──────────────► │              │                           │
-│  User    │                   └──────┬───────┘                           │
-└──────────┘                          │                                   │
-                                      │                                   │
-                                      │ LLM API                          │ Compile
-                                      ▼                                   ▼
-                                ┌──────────┐                       ┌──────────────┐
-                                │ OpenRouter│                       │   Compile    │
-                                │  / LLM   │                       │   Server     │
-                                └──────────┘                       └──────────────┘
+┌──────────┐     Long Polling    ┌──────────────┐   Internal API    ┌──────────────┐
+│ Telegram │ ◄─────────────────► │              │ ────────────────► │  Litewrite   │
+│  User    │                     │   nanobot    │                   │  Web (Next)  │
+├──────────┤     WebSocket       │  (Python)    │                   └──────┬───────┘
+│  Feishu  │ ◄─────────────────► │              │                          │
+│  User    │                     └──────┬───────┘                          │
+└──────────┘                            │                                  │
+                                        │ LLM API                         │ Compile
+                                        ▼                                  ▼
+                                  ┌──────────┐                      ┌──────────────┐
+                                  │ OpenRouter│                      │   Compile    │
+                                  │  / LLM   │                      │   Server     │
+                                  └──────────┘                      └──────────────┘
 ```
 
-All services run within the same Docker Compose network. nanobot communicates with Litewrite via Internal API endpoints authenticated by `INTERNAL_API_SECRET`.
+All services run within the same Docker Compose network. nanobot communicates with Litewrite via Internal API endpoints authenticated by `X-Internal-Secret`.
 
 ## Prerequisites
 
-- Litewrite running via `docker compose` (see main README)
+- Litewrite running via `docker compose` (see main [README](../README.md))
 - An LLM API key (OpenRouter recommended)
-- A Feishu enterprise app (for Feishu bot integration), and/or
-- A Telegram bot token (for Telegram bot integration)
+- A Telegram bot token (for Telegram integration), and/or
+- A Feishu enterprise app (for Feishu/Lark integration)
 
 ## Configuration
 
@@ -59,20 +58,17 @@ All nanobot configuration is done through environment variables in the root `.en
 
 ### LLM Model Configuration
 
-The default model is set in `nanobot/nanobot/config/schema.py`:
+The default model is set in `nanobot/nanobot/config/schema.py`. To override it, set the environment variable:
 
-```python
-model: str = "minimax/minimax-m2.1"
-```
-
-To change it, modify the default or override via environment variable:
 ```
 NANOBOT__AGENTS__DEFAULTS__MODEL=anthropic/claude-sonnet-4-20250514
 ```
 
 Supported models (via OpenRouter): any model available on [openrouter.ai/models](https://openrouter.ai/models).
 
-## Telegram Bot Setup (Step by Step)
+---
+
+## Telegram Bot Setup
 
 ### 1. Create Bot via @BotFather
 
@@ -108,7 +104,7 @@ Open a chat with your bot in Telegram and send a message. The bot uses **long po
 
 ### Optional: Restrict Access
 
-To limit who can use the bot, set an allow list of Telegram user IDs or usernames via the nested env var:
+To limit who can use the bot, set an allow list of Telegram user IDs or usernames:
 
 ```bash
 NANOBOT__CHANNELS__TELEGRAM__ALLOW_FROM=["123456789","your_username"]
@@ -118,7 +114,7 @@ You can find your Telegram user ID by messaging [@userinfobot](https://t.me/user
 
 ---
 
-## Feishu App Setup (Step by Step)
+## Feishu App Setup
 
 ### 1. Create App
 
@@ -150,7 +146,7 @@ Go to "Permissions & Scopes" and add:
 | `im:resource` | Access message resources |
 | `im:chat` | Access chat info |
 
-### 5. First-Time Connection (Chicken-and-Egg Problem)
+### 5. First-Time Connection
 
 Feishu requires an active WebSocket connection before you can save the "Long Connection" event subscription mode. Follow this order:
 
@@ -190,31 +186,129 @@ Then restart nanobot:
 docker compose up -d nanobot
 ```
 
-## Internal API Endpoints
-
-nanobot communicates with Litewrite through these internal API endpoints (all use `X-Internal-Secret` header):
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/internal/projects/list` | POST | List/search projects |
-| `/api/internal/projects/compile` | POST | Compile project, return PDF as base64 |
-| `/api/internal/files/list` | POST | List files in a project |
-| `/api/internal/files/read` | POST | Read file content |
-| `/api/internal/files/edit` | POST | Replace file content (full-file) |
-| `/api/internal/files/write` | POST | Edit file (shadow document, diff-based) |
+---
 
 ## nanobot Agent Tools
 
-The agent has access to these Litewrite-specific tools:
+The agent has access to **20 Litewrite-specific tools** for comprehensive project management:
+
+### Core Tools
 
 | Tool | Description |
 |------|-------------|
-| `litewrite_list_projects` | Search projects by name |
-| `litewrite_list_files` | List files in a project |
+| `litewrite_list_projects` | Search projects by name (requires `NANOBOT_DEFAULT_LITEWRITE_USER_ID`) |
+| `litewrite_agent` | Invoke Litewrite's built-in AI agent for complex reading/editing tasks |
+| `litewrite_compile` | Compile to PDF (pdflatex/xelatex/lualatex), auto-sends result to user |
+
+### File Management
+
+| Tool | Description |
+|------|-------------|
+| `litewrite_list_files` | List all files in a project |
 | `litewrite_read_file` | Read a file's content |
 | `litewrite_edit_file` | Replace a file's entire content |
-| `litewrite_compile` | Compile to PDF (pdflatex/xelatex/lualatex) |
-| `message` | Send text/file messages back to the user |
+| `litewrite_create_file` | Create a new file or folder |
+| `litewrite_rename_file` | Rename or move a file/folder |
+| `litewrite_delete_file` | Delete a file or folder (recursive) |
+| `litewrite_upload_file` | Upload a local file (images, PDFs, etc.) to a project |
+
+### Project Management
+
+| Tool | Description |
+|------|-------------|
+| `litewrite_create_project` | Create a new project (English or Chinese template) |
+| `litewrite_delete_project` | Permanently delete a project |
+| `litewrite_rename_project` | Rename or update project description |
+
+### Version Management
+
+| Tool | Description |
+|------|-------------|
+| `litewrite_list_versions` | List all saved versions of a project |
+| `litewrite_save_version` | Manually save current state as a named version |
+| `litewrite_restore_version` | Restore a project to a specific saved version |
+
+### Import Tools
+
+| Tool | Description |
+|------|-------------|
+| `litewrite_import_arxiv` | Import a project from arXiv (by ID or URL) |
+| `litewrite_import_github` | Import from GitHub/GitLab repository |
+| `litewrite_import_upload` | Create a project from an uploaded file (ZIP, tar.gz, .tex) |
+
+### Utility
+
+| Tool | Description |
+|------|-------------|
+| `message` | Send text or file messages back to the user |
+
+### The `litewrite_agent` Tool
+
+This is the most powerful tool — it delegates complex tasks to Litewrite's built-in AI agent, which has its own ReAct-style agent loop with file reading, planning, and precise line-based editing capabilities.
+
+**Key features:**
+- **Session management**: Per-project session cache. Consecutive calls to the same project reuse the same conversation, so the agent retains context across interactions.
+- **Web UI visibility**: Sessions appear in the Litewrite web UI as **"nanobot"** conversations in the Conversation History panel.
+- **Modes**: `agent` (default, for editing/writing) or `ask` (read-only Q&A).
+- **Timeout**: 5-minute execution limit for complex tasks.
+
+When the `litewrite_agent` tool is used, the flow is:
+1. nanobot calls the Next.js Internal API (`/api/internal/agent/run`)
+2. Next.js proxies to the AI Server (`/api/chat/run-sync`)
+3. AI Server's agent reads files, plans edits, and applies changes
+4. Results are returned to nanobot and forwarded to the chat platform
+
+---
+
+## Internal API Endpoints
+
+nanobot communicates with Litewrite through these Internal API endpoints. All requests use `POST` method and require `X-Internal-Secret` header.
+
+### Project Operations
+
+| Endpoint | Description |
+|----------|-------------|
+| `/api/internal/projects/list` | List/search projects (filter by `ownerId`) |
+| `/api/internal/projects/create` | Create a new project |
+| `/api/internal/projects/delete` | Delete a project |
+| `/api/internal/projects/rename` | Rename or update project metadata |
+| `/api/internal/projects/compile` | Compile project, return PDF as base64 |
+
+### File Operations
+
+| Endpoint | Description |
+|----------|-------------|
+| `/api/internal/files/list` | List files in a project |
+| `/api/internal/files/read` | Read file content (with line count) |
+| `/api/internal/files/edit` | Replace entire file content (direct apply) |
+| `/api/internal/files/create` | Create a new file or folder |
+| `/api/internal/files/rename` | Rename or move a file/folder |
+| `/api/internal/files/delete` | Delete a file or folder |
+| `/api/internal/files/upload` | Upload file (base64 or text content) |
+
+### Version Operations
+
+| Endpoint | Description |
+|----------|-------------|
+| `/api/internal/projects/versions/list` | List all saved versions |
+| `/api/internal/projects/versions/create` | Save current state as a version |
+| `/api/internal/projects/versions/restore` | Restore to a specific version |
+
+### Import Operations
+
+| Endpoint | Description |
+|----------|-------------|
+| `/api/internal/projects/import/arxiv` | Import from arXiv |
+| `/api/internal/projects/import/github` | Import from GitHub/GitLab |
+| `/api/internal/projects/import/upload` | Import from uploaded file |
+
+### Agent Operations
+
+| Endpoint | Description |
+|----------|-------------|
+| `/api/internal/agent/run` | Invoke Litewrite AI agent (sync, 5min timeout) |
+
+---
 
 ## Docker Compose Services
 
@@ -232,6 +326,7 @@ nanobot:
   environment:
     - NANOBOT__LITEWRITE__URL=http://web:3000
     - NANOBOT__LITEWRITE__API_SECRET=${INTERNAL_API_SECRET}
+    - NANOBOT__LITEWRITE__AI_SERVER_URL=http://ai-server:6612
     - NANOBOT__CHANNELS__TELEGRAM__ENABLED=${TELEGRAM_ENABLED}
     - NANOBOT__CHANNELS__TELEGRAM__TOKEN=${TELEGRAM_BOT_TOKEN}
     - NANOBOT__CHANNELS__FEISHU__ENABLED=${FEISHU_ENABLED}
@@ -242,13 +337,15 @@ nanobot:
     - web
 ```
 
+---
+
 ## Common Operations
 
 ```bash
 # Check nanobot status
 docker compose ps nanobot
 
-# View nanobot logs
+# View nanobot logs (follow)
 docker compose logs -f nanobot
 
 # Restart nanobot (after .env changes)
@@ -260,10 +357,13 @@ docker compose build nanobot && docker compose up -d nanobot
 # Check Feishu connection
 docker logs litewrite-nanobot 2>&1 | grep "connected to wss"
 
-# clear nanobot chat history (method 1: send /clear in any chat)
-# Just type /clear in Feishu, WhatsApp, Telegram, etc. — instant!
+# Check Telegram connection
+docker logs litewrite-nanobot 2>&1 | grep "Telegram bot"
 
-# clear nanobot chat history (method 2: docker CLI, clears ALL sessions)
+# Clear nanobot chat history (method 1: in-chat command)
+# Just type /clear in Feishu, Telegram, etc. — instant!
+
+# Clear nanobot chat history (method 2: Docker CLI, clears ALL sessions)
 docker exec litewrite-nanobot sh -c 'rm -rf /root/.nanobot/sessions/*.jsonl'
 docker restart litewrite-nanobot
 
@@ -273,6 +373,8 @@ curl -s -X POST http://localhost:3000/api/internal/projects/list \
   -H "X-Internal-Secret: $(grep INTERNAL_API_SECRET .env | cut -d= -f2)" \
   -d '{}' | python3 -m json.tool
 ```
+
+---
 
 ## Troubleshooting
 
@@ -287,46 +389,69 @@ curl -s -X POST http://localhost:3000/api/internal/projects/list \
 - Ensure "Long Connection" mode is saved in event subscription settings
 - Restart: `docker restart litewrite-nanobot`
 
+### Telegram bot doesn't respond
+- Verify `TELEGRAM_ENABLED=true` and `TELEGRAM_BOT_TOKEN` are set
+- Check logs: `docker compose logs nanobot | grep Telegram`
+- Ensure no other bot instance is running with the same token
+
+### "Project not found" when using tools
+- Ensure `NANOBOT_DEFAULT_LITEWRITE_USER_ID` is set to your Litewrite user UUID
+- Without this, nanobot cannot list projects and validation always fails
+- See [Get Your Litewrite User ID](#7-get-your-litewrite-user-id) for instructions
+
 ### Compilation fails with Chinese text
 - Use `compiler="xelatex"` in the compile command
-- The agent should do this automatically when the Skill detects CJK content
+- The agent should do this automatically when it detects CJK content
 - Ensure the compile server has CJK fonts installed (default Docker image includes them)
 
 ### File edits don't appear in the browser
-- nanobot's `edit_file` clears the Yjs cache after writing
+- nanobot edits are applied directly via the Internal API and synced through the WebSocket server
 - If the browser still shows old content, refresh the page
 - Check WS server is running: `docker compose ps ws`
+
+---
 
 ## Project Structure
 
 ```
 nanobot/
-├── main.py                  # Entry point (gateway)
+├── main.py                  # Entry point
 ├── requirements.txt         # Python dependencies
 ├── Dockerfile               # Production image
-├── Dockerfile.dev           # Development image
+├── Dockerfile.dev           # Development image (hot reload)
 ├── DEPLOYMENT.md            # This file
 └── nanobot/                 # Python package
     ├── agent/               # LLM agent loop + tools
-    │   ├── loop.py          # Core agent loop
-    │   ├── context.py       # System prompt builder
-    │   ├── skills.py        # Skill loading
+    │   ├── loop.py          # Core ReAct agent loop (max 20 iterations)
+    │   ├── context.py       # System prompt & history builder
+    │   ├── memory.py        # Session-based memory management
+    │   ├── skills.py        # Extensible skill system
+    │   ├── subagent.py      # Sub-agent manager
     │   └── tools/
-    │       ├── litewrite.py # Litewrite API tools
-    │       ├── message.py   # Send messages (with file support)
+    │       ├── registry.py  # Central tool registry
+    │       ├── litewrite.py # 20 Litewrite API tools
+    │       ├── message.py   # Send messages (with file/media support)
     │       ├── filesystem.py # Local file operations
     │       ├── shell.py     # Shell command execution
-    │       └── web.py       # Web search/fetch
+    │       ├── web.py       # Web search/fetch
+    │       ├── deep_research.py # Deep research integration
+    │       ├── session.py   # Session management
+    │       └── spawn.py     # Process spawning
     ├── channels/
     │   ├── base.py          # Channel interface
-    │   ├── feishu.py        # Feishu/Lark (WebSocket)
-    │   ├── telegram.py      # Telegram (polling)
-    │   └── manager.py       # Channel lifecycle
-    ├── bus/                 # Async message bus
-    ├── providers/           # LLM provider abstraction
-    ├── session/             # Conversation history
-    ├── config/              # Configuration (env vars + JSON)
+    │   ├── manager.py       # Channel lifecycle manager
+    │   ├── feishu.py        # Feishu/Lark (WebSocket long-connection)
+    │   ├── telegram.py      # Telegram (long polling)
+    │   └── whatsapp.py      # WhatsApp (WebSocket bridge)
+    ├── bus/                  # Async message bus (decouples channels from agent)
+    │   ├── events.py        # InboundMessage / OutboundMessage
+    │   └── queue.py         # Async queue with subscriber pattern
+    ├── providers/            # LLM provider abstraction (LiteLLM)
+    ├── session/              # Conversation history persistence
+    ├── config/               # Environment-based configuration (Pydantic)
+    │   ├── schema.py         # Config schema with nested env vars
+    │   └── loader.py         # Config loader
     └── skills/
         └── litewrite/
-            └── SKILL.md     # Agent instructions for Litewrite
+            └── SKILL.md      # Agent instructions for Litewrite operations
 ```
