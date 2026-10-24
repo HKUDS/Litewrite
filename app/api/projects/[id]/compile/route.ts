@@ -195,6 +195,9 @@ export async function POST(
 
       // Check response status
       if (!response.ok) {
+        // Preserve queue/timeout statuses consumed by the compile UI. Other
+        // compile-server errors stay HTTP 200 so the UI can render their details.
+        const responseStatus = [408, 429, 504].includes(response.status) ? response.status : 200;
         let result: { error?: string; details?: Array<{ file: string; issues?: string[] }>; logs?: string } | null = null;
         let responseText = "";
 
@@ -212,7 +215,7 @@ export async function POST(
               severity: "error" as const,
             }],
             logs: `Compile server returned an unexpected response (HTTP ${response.status}).\n\nResponse (first 500 chars):\n${responseText.substring(0, 500)}`,
-          });
+          }, { status: responseStatus });
         }
 
         console.error("[Compile] Compile server error:", response.status, result);
@@ -266,7 +269,7 @@ export async function POST(
             severity: "error" as const,
           }],
           logs: result?.logs || result?.error || "",
-        });
+        }, { status: responseStatus });
       }
 
       // Response OK: parse JSON
